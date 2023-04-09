@@ -29,12 +29,14 @@ Install the required Python dependencies using pip:
 
 # Usage:
 
-1. Add your API ID and API Hash as plain text in 'api_details.txt'.
-2. Add the list of search terms, one per line, in 'search_terms.txt'.
+
+1. Add the list of search terms, one per line, into a .txt file.
+2. Make sure you have your Telegram API details ready [https://my.telegram.org/auth]
 3. The script will search through all the channels the user is a member of.
 4. The search results will be exported as HTML and CSV files in a timestamped output folder.
 5. The script will generate a report containing the search results for each channel.
 6. The script will plot the message count per day for each search term in a graph and save it as an image.
+
 
 # Functions:
 
