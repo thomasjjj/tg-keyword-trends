@@ -30,7 +30,7 @@ Install the required Python dependencies using pip:
 # Usage:
 
 
-1. Add the list of search terms, one per line, into a .txt file.
+1. Add the search terms, one per line, into a .txt file. You will be prompted to enter the file location shortly.
 2. Make sure you have your Telegram API details ready [https://my.telegram.org/auth]
 3. The script will search through all the channels the user is a member of.
 4. The search results will be exported as HTML and CSV files in a timestamped output folder.
@@ -50,12 +50,12 @@ Install the required Python dependencies using pip:
 
 # Dependencies:
 
-Telethon
-pandas
-matplotlib
-colorama
-regex
-reportlab
-Python Version:
+- Telethon
+- pandas
+- matplotlib
+- colorama
+- regex
+- reportlab
+- Python Version:
 
 Python 3.11 or higher
