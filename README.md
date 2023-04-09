@@ -1,10 +1,12 @@
+# Telegram Keyword Trends
+
 **This script searches messages containing specified search terms in Telegram channels the user is a member of. It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day.**
 
 It is designed to monitor trends of search terms in much the same way that Google Trends does. This can be very useful for identifying the emergence of hatespeech or discussion/narratives following certain events.
 
 ###### Example result exploring hate speech during the Russian full-scale invasion of Ukraine
 [![Example result exploring hate speech during the Russian full-scale invasion of Ukraine](https://user-images.githubusercontent.com/118008765/230750727-0a4f74db-9ab2-41df-b49a-c1ec2c785753.png "Example result exploring hate speech during the Russian full-scale invasion of Ukraine")](https://user-images.githubusercontent.com/118008765/230750727-0a4f74db-9ab2-41df-b49a-c1ec2c785753.png "Example result exploring hate speech during the Russian full-scale invasion of Ukraine")
-*This image is an example result showing how the channels under investigation saw a surge in specific terms.*
+*This image is an example result showing how the channels under investigation saw a surge in usage of specific terms.*
 
 This tool has been tested on English and Russian language search terms.
 

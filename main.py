@@ -1,5 +1,6 @@
 import os
 import re
+import sys
 import time as t
 from _ast import pattern
 import datetime
@@ -65,12 +66,14 @@ def create_output_directory(directory_name):
     print('Directory created.')
     return directory_name
 
-
 def open_file_dialog():
     root = tk.Tk()
     root.withdraw()  # Hide the main window
+    root.wm_attributes('-topmost', True)  # Make the window appear on top
     file_path = filedialog.askopenfilename(title="Select the search terms file")
+    root.destroy()  # Destroy the window after the dialog is closed
     return file_path
+
 
 
 def check_search_terms_file(file_path):
@@ -111,22 +114,21 @@ def retrieve_api_details():
         """
     api_details_file_path = 'api_values.txt'
     if not os.path.exists(api_details_file_path):
-        api_id, api_hash = 00000000, 'xxxxxxxxxxxxxxxxxxxxxx'
+        print_colored('No API details found. Please follow the instructions. This should be a one-time setup.', Fore.YELLOW)
+        api_id = input('Type your API ID: ')
+        api_hash = input('Type your API Hash: ')
+
         with open(api_details_file_path, 'w') as file:
             file.write('api_id:\n' + str(api_id) + '\n')
             file.write('api_hash:\n' + api_hash)
-        print('\n'
-              'WARNING: No API details found. They have been set to default values\n'
-              'To resolve this, open api_values.txt and enter your API details\n'
-              'API details can be retrieved from https://my.telegram.org/auth\n'
-              )
+
     else:
         with open(api_details_file_path, 'r') as file:
             lines = file.readlines()
             api_id = int(lines[1])
             api_hash = lines[3].strip()
 
-    print('\nAPI ID retrieved: ' + str(api_id) + " ¦ API Hash retrieved: " + api_hash + "\n")
+    print('API ID retrieved: ' + str(api_id) + " ¦ API Hash retrieved: " + api_hash + "\n")
     return api_id, api_hash
 
 
@@ -278,7 +280,7 @@ try:
     client = TelegramClient('session_name', api_id, api_hash)
     client.start()
 except:
-    print_colored('Error starting Telegram client. Check your API details are correct and restart the process', Fore.RED)
+    sys.exit("Error connecting to Telegram client. Please fix API details in api_values.txt and restart.")
 
 # Create an empty DataFrame to store the results
 all_results = pd.DataFrame(columns=['time', 'message', 'message_id', 'channel_id', 'search_term', 'link'])
