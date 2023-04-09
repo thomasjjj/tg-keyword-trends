@@ -14,7 +14,18 @@ This tool has been tested on English and Russian language search terms.
 
 **WARNING:** This tool uses your list of followed groups as the list it searches from. It may include personal chats/groups. For the sake of OPSEC, it is recommended to use a burner account and follow only investigation-specific chats.
 
+# Installation
+Clone the tg-keyword-trends repository by running the following command in your terminal or command prompt:
 
+``` git clone https://github.com/thomasjjj/tg-keyword-trends.git```
+
+Navigate into the tg-keyword-trends directory:
+
+```cd tg-keyword-trends```
+
+Install the required Python dependencies using pip:
+
+```pip install -r requirements.txt```
 
 # Usage:
 
