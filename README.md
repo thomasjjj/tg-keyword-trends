@@ -56,6 +56,5 @@ Install the required Python dependencies using pip:
 - colorama
 - regex
 - reportlab
-- Python Version:
 
-Python 3.11 or higher
+Python Version: Python 3.11 or higher
