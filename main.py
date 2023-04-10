@@ -83,7 +83,7 @@ def check_search_terms_file(file_path):
             f.write(new_term + '\n')
         search_terms = [new_term]
     else:
-        print_colored('search_terms.txt found', Fore.GREEN)
+        print_colored('Search terms TXT file found', Fore.GREEN)
 
     return search_terms
 
