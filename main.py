@@ -25,7 +25,10 @@ WARNING: This tool uses your list of followed groups as the list it searches fro
 def print_colored(string, color):
     print(color + string + Style.RESET_ALL)
 
-
+def seconds_to_hms(seconds):
+    m, s = divmod(int(seconds), 60)
+    h, m = divmod(m, 60)
+    return h, m, s
 
 def create_output_directory(directory_name):
     os.makedirs(directory_name, exist_ok=True)
@@ -197,6 +200,10 @@ def generate_report(all_results, channels, search_terms, output_folder, now):
         f.write("Project Date\n")
         f.write(f"{now}\n\n")
 
+        f.write("Summary Stats\n")
+        num_results = len(all_results)
+        date_range = (all_results['time'].min(), all_results['time'].max())
+
         f.write("Channels Searched\n")
         for channel in channels:
             f.write(f"{channel.title}\n")
@@ -206,13 +213,6 @@ def generate_report(all_results, channels, search_terms, output_folder, now):
         for term in search_terms:
             f.write(f"{term}\n")
         f.write("\n")
-
-        f.write("Summary Stats\n")
-        num_results = len(all_results)
-        date_range = (all_results['time'].min(), all_results['time'].max())
-
-        f.write(f"Number of results: {num_results}\n")
-        f.write(f"Date range of results: {date_range[0]} - {date_range[1]}\n\n")
 
         f.write("Most Common Channels\n")
         channel_counts = Counter(all_results['channel_id']).most_common()
@@ -252,6 +252,9 @@ search_terms = check_search_terms_file(search_terms_file)
 dataframes_dict = {search_term: [] for search_term in search_terms}
 
 count = 0
+total_channels = sum(1 for dialog in dialogs if dialog.is_channel)
+start_time = t.time()
+
 
 # Iterate over each channel and process its messages
 for dialog in dialogs:
@@ -263,7 +266,7 @@ for dialog in dialogs:
         print(str(count) + "¦ Searching..." + str(channel))
 
         for search_string in search_terms:
-            print("\033[33mSearching term: \033[0m" + search_string)
+            print("\033[33mSearching term: \033[0m" + search_string + "...", end='', flush=True)
 
             # Replace 'keyword' with your desired value
             messages = []
@@ -286,9 +289,11 @@ for dialog in dialogs:
                 df = pd.DataFrame(data)
                 df['link'] = 'https://t.me/c/' + str(channel_id) + '/' + df['message_id'].astype(str)
                 df['time'] = df['time'].apply(lambda x: x.strftime('%d/%b/%Y'))
-                print(f"Messages from {dialog.title}")
-                print(df[['time', 'message', 'link']])
-                print()
+
+                print(f'\r\033[33mSearching term: \033[0m{search_string} - \033[32mResults: {len(messages)}\033[0m', flush=True)
+                # print(f"Messages from {dialog.title}")
+                # print(df[['time', 'message', 'link']])  # use if want to show the dataframe printed
+
 
                 # Append the results to the all_results DataFrame
                 all_results = pd.concat([all_results, pd.DataFrame(data)], ignore_index=True)
@@ -296,6 +301,30 @@ for dialog in dialogs:
                 dataframes_dict[search_string].append(df)  # This line is modified
                 # Wait for 1 seconds to avoid rate limits
                 t.sleep(1)
+
+            else:
+                print(f'\r\033[33mSearching term: \033[0m{search_string} - \033[33mNo results\033[0m', flush=True)
+
+        # Calculate ETA
+        elapsed_time = t.time() - start_time
+        average_time_per_channel = elapsed_time / count
+        remaining_channels = total_channels - count
+        estimated_remaining_time = remaining_channels * average_time_per_channel
+        h, m, s = seconds_to_hms(estimated_remaining_time)
+        elapsed_h, elapsed_m, elapsed_s = seconds_to_hms(elapsed_time)
+        total_time = elapsed_time + estimated_remaining_time
+        progress_percentage = elapsed_time / total_time
+
+        # Generate a 24-character progress bar
+        progress_bar_length = 74
+        filled_length = int(progress_percentage * progress_bar_length)
+        progress_bar = '█' * filled_length + '-' * (progress_bar_length - filled_length)
+
+        time_message = f"Processed {count}/{total_channels} channels. Time elapsed: {elapsed_h:02d}:{elapsed_m:02d}:{elapsed_s:02d}. ETA: {h:02d}:{m:02d}:{s:02d}."
+        progress_message = f"Progress: |{progress_bar}| {progress_percentage * 100:.1f}%"
+        print_colored(time_message, Fore.CYAN)
+        print_colored(progress_message, Fore.CYAN)
+
 
         # Print a nice pink separator
         print('\x1b[38;2;255;20;147m' + '-------------------------------------------------------------------------------------------' + '\x1b[0m')

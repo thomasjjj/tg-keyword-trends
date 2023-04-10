@@ -64,3 +64,13 @@ Install the required Python dependencies using pip:
 - reportlab
 
 Python Version: Python 3.11 or higher
+
+# TODO
+
+------------
+
+[ ] add asyncio options to optimise performance
+[ ] better graphing, eg percent usage over time to adjust for new channels or surges in activity
+[ ] time range selection
+[ ] custom channel list
+[ ] wordcloud generation of all matching messages to extract additional context, terms, and insights
