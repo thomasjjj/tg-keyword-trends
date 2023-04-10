@@ -69,12 +69,8 @@ Python Version: Python 3.11 or higher
 
 ------------
 
-[ ] add asyncio options to optimise performance
-
-[ ] better graphing, eg percent usage over time to adjust for new channels or surges in activity
-
-[ ] time range selection
-
-[ ] custom channel list
-
-[ ] wordcloud generation of all matching messages to extract additional context, terms, and insights
+- [ ] add asyncio options to optimise performance
+- [ ] better graphing, eg percent usage over time to adjust for new channels or surges in activity
+- [ ] time range selection
+- [ ] custom channel list
+- [ ] wordcloud generation of all matching messages to extract additional context, terms, and insights
