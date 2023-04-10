@@ -1,12 +1,14 @@
 # Telegram Keyword Trends
-A monitoring tool to explore the emergence of hatespeech, disinformation, and narratives of interest on the Telegram chat platform. Please use this tool with caution as it does not have content moderation or filtering. You are responsible for the content that may be exported.
+An analysis tool to explore the emergence of hatespeech, disinformation, and narratives of interest on the Telegram chat platform. Please use this tool with caution as it does not have content moderation or filtering. You are responsible for the content that may be exported.
 
-###### Screenshot of tool in action
+###### Screenshot of tool in action, exploring hate speech during the Russian full-scale invasion of Ukraine
 [![Screenshot of tool in action](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")
 
 **This script searches messages containing specified search terms in Telegram channels the user is a member of. It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day.**
 
 It is designed to monitor trends of search terms in much the same way that Google Trends does. This can be very useful for identifying the emergence of hatespeech or discussion/narratives following certain events.
+
+This current version does not do any significant adjustment to the data, for example, the graph does not display incidence of terms adjusted to the incidence of all messages. This means further analysis should be conducted to ensure that a sharp spike in terms is not confounded by a sharp spike in general activity. For this reason, the graph output should be treated as indicative of need for further research and statistical analysis.
 
 ###### Example result exploring hate speech during the Russian full-scale invasion of Ukraine
 [![Example result exploring hate speech during the Russian full-scale invasion of Ukraine](https://user-images.githubusercontent.com/118008765/230750727-0a4f74db-9ab2-41df-b49a-c1ec2c785753.png "Example result exploring hate speech during the Russian full-scale invasion of Ukraine")](https://user-images.githubusercontent.com/118008765/230750727-0a4f74db-9ab2-41df-b49a-c1ec2c785753.png "Example result exploring hate speech during the Russian full-scale invasion of Ukraine")
@@ -17,8 +19,6 @@ It is designed to monitor trends of search terms in much the same way that Googl
 [![Screenshot of some of the information generated in the report](https://user-images.githubusercontent.com/118008765/230942324-d42d96da-8df4-4a87-8201-360852b2f662.png "xxx")](https://user-images.githubusercontent.com/118008765/230942324-d42d96da-8df4-4a87-8201-360852b2f662.png "xxx")
 
 This tool has been tested on English and Russian language search terms.
-
-***Currently English has full functionality and the tool works well with Cyrillic, but the generated report may have a few issues. All other features should work as expected.***
 
 **WARNING:** This tool uses your list of followed groups as the list it searches from. It may include personal chats/groups. For the sake of OPSEC, it is recommended to use a burner account and follow only investigation-specific chats.
 
@@ -42,7 +42,6 @@ Install the required Python dependencies using pip:
 - Generates report documenting the key details of the scrape (date, channels accessed, etc) for auditability of findings.
 
 # Usage:
-
 
 1. Add the search terms, one per line, into a .txt file. You will be prompted to enter the file location shortly.
 2. Make sure you have your Telegram API details ready [https://my.telegram.org/auth]
@@ -77,8 +76,12 @@ Python Version: Python 3.11 or higher
 
 ------------
 
+- [ ] prevent opened graph png from disappearing
+- [ ] make graph production per term as well as aggregated to remove scaling issues
+- [ ] insert all graphs into PDF report (separate from TXT file report)
 - [ ] add asyncio options to optimise performance
 - [ ] better graphing, eg percent usage over time to adjust for new channels or surges in activity
 - [ ] time range selection
 - [ ] custom channel list
 - [ ] wordcloud generation of all matching messages to extract additional context, terms, and insights
+- [ ] set ability to group terms into single line on graph (e.g translations/transliterations)
