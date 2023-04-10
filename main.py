@@ -33,29 +33,30 @@ WARNING: This tool uses your list of followed groups as the list it searches fro
          For the sake of OPSEC, it is recommended to use a burner account and follow only investigation-specific chats.
 """
 
-def print_coloured(string, colour):
+def printC(string, colour):
+    '''Print coloured and then reset: The "colour" variable should be written as "Fore.GREEN" (or other colour) as it
+    uses Fore function from colorama.'''
     print(colour + string + Style.RESET_ALL)
 
 def connect_to_telegram():
-    def retrieve_api_details():
-        """
-        Reads the API ID and API hash values from a file named 'api_values.txt'. If the file does not exist,
-        the function sets default values for the API ID and API hash and creates the file.
+    """
+     Connects to the Telegram API using the API ID and API hash values stored in a file named 'api_values.txt'.
+     If the file does not exist, it prompts the user to enter their API ID and API hash and creates the file.
 
-        If the file does exist, the function reads the values from the file and returns them.
+     Returns:
+         TelegramClient: A connected TelegramClient instance.
 
-        Returns:
-            tuple: A tuple containing the API ID (an integer) and API hash (a string) values.
-        """
+     Raises:
+         SystemExit: If the connection to the Telegram client fails.
+     """
 
+    def retrieve_or_generate_api_details():
         api_details_file_path = 'api_values.txt'
-
         if not os.path.exists(api_details_file_path):
-            print_coloured('No API details found. Please follow the instructions. This should be a one-time setup.',
-                           Fore.YELLOW)
+            printC('No API details found. Please follow the instructions. This should be a one-time setup.',
+                   Fore.YELLOW)
             api_id = input('Type your API ID: ')
             api_hash = input('Type your API Hash: ')
-
             with open(api_details_file_path, 'w') as file:
                 file.write(f'api_id:\n{api_id}\n')
                 file.write(f'api_hash:\n{api_hash}')
@@ -64,19 +65,17 @@ def connect_to_telegram():
                 lines = file.readlines()
                 api_id = int(lines[1])
                 api_hash = lines[3].strip()
-
         print(f'API ID retrieved: {api_id} ¦ API Hash retrieved: {api_hash}\n')
         return api_id, api_hash
 
-    def attempt_connection():
-        api_id, api_hash = retrieve_api_details()
+    def attempt_connection_to_telegram():
+        api_id, api_hash = retrieve_or_generate_api_details()
         client = TelegramClient('session_name', api_id, api_hash)
         if not client.start():
             sys.exit("Error connecting to Telegram client. Please fix API details in api_values.txt and restart.")
         return client
 
-    client = attempt_connection()
-    return client
+    return attempt_connection_to_telegram()  # returns the client created in sub-function
 
 def progress_display(start_time, total_channels, count):
     '''
@@ -111,8 +110,8 @@ def progress_display(start_time, total_channels, count):
 
     time_message = f"Processed {count}/{total_channels} channels. Time elapsed: {elapsed_h:02d}:{elapsed_m:02d}:{elapsed_s:02d}. ETA: {h:02d}:{m:02d}:{s:02d}."
     progress_message = f"Progress: |{progress_bar}| {progress_percentage * 100:.1f}%"
-    print_coloured(time_message, Fore.CYAN)
-    print_coloured(progress_message, Fore.CYAN)
+    printC(time_message, Fore.CYAN)
+    printC(progress_message, Fore.CYAN)
 
 def create_output_directory(directory_name):
     os.makedirs(directory_name, exist_ok=True)
@@ -155,7 +154,7 @@ def check_search_terms_file(file_path):
             f.write(new_term + '\n')
         search_terms = [new_term]
     else:
-        print_coloured('Search terms TXT file found\n', Fore.GREEN)
+        printC('Search terms TXT file found\n', Fore.GREEN)
 
     return search_terms
 
@@ -216,17 +215,15 @@ def plot_keyword_frequency(dataframes_dict, output_folder):
     filename = 'message_count_per_day.png'
     filepath = os.path.join(output_folder, filename)
 
-    print_coloured('Saving graph as image...', Fore.YELLOW)
+    printC('Saving graph as image...', Fore.YELLOW)
     plt.savefig(filepath)
-    print_coloured('Saved Graph as image.', Fore.GREEN)
+    printC('Saved Graph as image.', Fore.GREEN)
 
     plt.show(block=False)
-
-
     # Idiot alert - I spent hours debugging the code because it didn't work after this stage.
     # The block=false is mandatory, so it runs in the background while the graph shows
 
-def generate_report(all_results, channels, search_terms, output_folder, now):
+def generate_txt_report(all_results, channels, search_terms, output_folder, now):
     """
     Generates a text report summarizing the search results for a list of channels and search terms.
 
@@ -274,8 +271,9 @@ def generate_report(all_results, channels, search_terms, output_folder, now):
 
 
 ########################################################################
-print_coloured(description, Fore.LIGHTYELLOW_EX)
-print_coloured(WARNING, Fore.LIGHTRED_EX)
+
+printC(description, Fore.LIGHTYELLOW_EX)
+printC(WARNING, Fore.LIGHTRED_EX)
 client = connect_to_telegram()
 
 # Create an empty DataFrame to store the results
@@ -284,7 +282,7 @@ all_results = pd.DataFrame(columns=['time', 'message', 'message_id', 'channel_id
 # Get all the channels you are a member of
 dialogs = client.get_dialogs()
 
-print_coloured('Select the .txt file with search terms.'
+printC('Select the .txt file with search terms.'
               'Each search term should be on a new line.', Fore.BLUE)
 
 # search_terms_file = 'search_terms.txt'  # Commented out to allow for file search dialogue
@@ -356,7 +354,7 @@ for dialog in dialogs:
                 all_results = pd.concat([all_results, pd.DataFrame(data)], ignore_index=True)
                 # Add the current DataFrame to the list
                 dataframes_dict[search_string].append(df)  # This line is modified
-                # Wait for 1 seconds to avoid rate limits
+                # Wait for 1 seconds to avoid rate limits - going lower seems to cause issues
                 t.sleep(1)
 
             else:
@@ -384,18 +382,18 @@ try:
         # Export to HTML
         try:
             with open(filename_html, 'w', encoding='utf-8') as f:
-                print_coloured('Making HTML output file...', Fore.YELLOW)
+                printC('Making HTML output file...', Fore.YELLOW)
                 html = all_results.to_html(index=False, formatters={'link': render_url}, escape=False)
                 f.write(html)
-                print_coloured(f"Saved {filename_html}", Fore.GREEN)
+                printC(f"Saved {filename_html}", Fore.GREEN)
         except IOError as e:
             print(f'Error making HTML file: {e}')
 
         # Export to a CSV
         try:
-            print_coloured('Exporting to csv...', Fore.YELLOW)
+            printC('Exporting to csv...', Fore.YELLOW)
             all_results.to_csv(filename_csv, index=False, encoding='utf-8')
-            print_coloured(f"Saved {filename_csv}", Fore.GREEN)
+            printC(f"Saved {filename_csv}", Fore.GREEN)
         except IOError as e:
             print(f'Error making CSV: {e}')
 
@@ -407,22 +405,22 @@ try:
 
         # Generate the report
         try:
-            print_coloured('Generating report...', Fore.YELLOW)
+            printC('Generating report...', Fore.YELLOW)
             channels = [dialog for dialog in dialogs if dialog.is_channel]
-            generate_report(all_results, channels, search_terms, output_folder, now)
-            print_coloured('Report generated.', Fore.GREEN)
+            generate_txt_report(all_results, channels, search_terms, output_folder, now)
+            printC('Report generated.', Fore.GREEN)
         except Exception as e:
             print(f'Error generating report: {e}')
             traceback.print_exc()
 
     except ValueError as e:
-        print_coloured('Error.', Fore.RED)
+        printC('Error.', Fore.RED)
 
 
 except ValueError as e:
-    print_coloured('Error.', Fore.RED)
+    printC('Error.', Fore.RED)
 
-print_coloured('\nProcess completed', Fore.GREEN)
+printC('\nProcess completed', Fore.GREEN)
 
 # Disconnect the Telethon client from the Telegram server
 client.disconnect()
