@@ -14,14 +14,26 @@ import tkinter as tk
 from tkinter import filedialog
 
 
-"""
-This script searches messages containing specified search terms in Telegram channels the user is a member of.
-It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day.
+description = r"""
 
+ _____    _                                  _____                  _     
+|_   _|  | |                                |_   _|                | |    
+  | | ___| | ___  __ _ _ __ __ _ _ __ ___     | |_ __ ___ _ __   __| |___ 
+  | |/ _ \ |/ _ \/ _` | '__/ _` | '_ ` _ \    | | '__/ _ \ '_ \ / _` / __|
+  | |  __/ |  __/ (_| | | | (_| | | | | | |   | | | |  __/ | | | (_| \__ \
+  \_/\___|_|\___|\__, |_|  \__,_|_| |_| |_|   \_/_|  \___|_| |_|\__,_|___/
+                  __/ |                                                   
+                 |___/                                                    
+By: Tom Jarvis ¦ Twitter: @tomtomjarvis
+---------------------------------------
+This script searches messages containing specified search terms in Telegram channels the user is a member of.
+It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day."""
+
+WARNING = r"""
 WARNING: This tool uses your list of followed groups as the list it searches from. It may include personal chats/groups.
          For the sake of OPSEC, it is recommended to use a burner account and follow only investigation-specific chats.
-
 """
+
 def print_colored(string, color):
     print(color + string + Style.RESET_ALL)
 
@@ -46,12 +58,13 @@ def open_file_dialog():
    Returns:
        str: The path of the selected .txt file.
    """
-
     root = tk.Tk()
     root.withdraw()  # Hide the main window
     root.wm_attributes('-topmost', True)  # Make the window appear on top
     file_path = filedialog.askopenfilename(title="Select the search terms file", filetypes=[("Text files", "*.txt")])
     root.destroy()  # Destroy the window after the dialog is closed
+    if not file_path:  # Check if file_path is empty
+        sys.exit("Process cancelled.")  # cancel the process if user clicks file dialogue "cancel"
     return file_path
 
 def check_search_terms_file(file_path):
@@ -218,7 +231,8 @@ def generate_report(all_results, channels, search_terms, output_folder, now):
 
 
 ########################################################################
-
+print_colored(description, Fore.LIGHTYELLOW_EX)
+print_colored(WARNING,Fore.LIGHTRED_EX)
 api_id, api_hash = retrieve_api_details()
 
 try:
