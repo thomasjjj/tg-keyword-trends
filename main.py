@@ -2,8 +2,6 @@ import os
 import re
 import sys
 import time as t
-from _ast import pattern
-import datetime
 from collections import Counter
 import traceback
 
@@ -12,11 +10,6 @@ from telethon.sync import TelegramClient
 from telethon.tl.types import InputPeerChannel
 from colorama import Style, Fore
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from reportlab.lib import colors
-from reportlab.lib.pagesizes import letter
-from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
 import tkinter as tk
 from tkinter import filedialog
 
@@ -33,18 +26,32 @@ def print_colored(string, color):
     print(color + string + Style.RESET_ALL)
 
 
+
 def create_output_directory(directory_name):
     os.makedirs(directory_name, exist_ok=True)
     print('Directory created.')
     return directory_name
 
+
 def open_file_dialog():
+    """
+   Opens a file dialog to allow the user to select a .txt file.
+
+   The function creates a hidden Tkinter window, brings it to the top, and opens a file dialog.
+   The file dialog is restricted to selecting .txt files. Once the user selects a file and closes
+   the dialog, the function destroys the hidden Tkinter window and returns the selected file path.
+
+   Returns:
+       str: The path of the selected .txt file.
+   """
+
     root = tk.Tk()
     root.withdraw()  # Hide the main window
     root.wm_attributes('-topmost', True)  # Make the window appear on top
-    file_path = filedialog.askopenfilename(title="Select the search terms file")
+    file_path = filedialog.askopenfilename(title="Select the search terms file", filetypes=[("Text files", "*.txt")])
     root.destroy()  # Destroy the window after the dialog is closed
     return file_path
+
 
 
 def check_search_terms_file(file_path):
@@ -169,77 +176,51 @@ def plot_keyword_frequency(dataframes_dict, output_folder):
 
 def generate_report(all_results, channels, search_terms, output_folder, now):
     """
-    Generates a PDF report summarizing the search results for a list of channels and search terms.
+    Generates a text report summarizing the search results for a list of channels and search terms.
 
-        The function creates a new PDF file in the specified output folder, and adds various summary statistics
-        and tables to the file, including the project date, the channels searched, the search terms used, summary stats
-        on the search results (e.g. number of results, date range), and a table of the most common channels.
+    The function creates a new text file in the specified output folder and writes various summary statistics
+    and information to the file, including the project date, the channels searched, the search terms used, summary stats
+    on the search results (e.g. number of results, date range), and a table of the most common channels.
 
-        Args:
-            all_results (pandas.DataFrame): A Pandas DataFrame containing all search results.
-            channels (list): A list of dictionaries, where each dictionary represents a Telegram channel and contains
-                             information about the channel ID and title.
-            search_terms (list): A list of strings representing the search terms used.
-            output_folder (str): The path to the directory where the output file should be saved.
-            now (str): A string representing the current date and time in ISO format (YYYY-MM-DD HH:MM:SS).
-        """
+    Args:
+        all_results (pandas.DataFrame): A Pandas DataFrame containing all search results.
+        channels (list): A list of dictionaries, where each dictionary represents a Telegram channel and contains
+                         information about the channel ID and title.
+        search_terms (list): A list of strings representing the search terms used.
+        output_folder (str): The path to the directory where the output file should be saved.
+        now (str): A string representing the current date and time in ISO format (YYYY-MM-DD HH:MM:SS).
+    """
     print(f"Generating report for {len(channels)} channels and {len(search_terms)} search terms...")
-    output_file = os.path.join(output_folder, f'report_{now}.pdf')
-    doc = SimpleDocTemplate(output_file, pagesize=letter)
+    output_file = os.path.join(output_folder, f'report_{now}.txt')
 
-    # Styles for the report
-    styles = getSampleStyleSheet()
-    styles.add(ParagraphStyle(name='Heading', fontSize=14, leading=16, spaceAfter=6))
-    styles.add(ParagraphStyle(name='List', fontSize=10, leftIndent=20, spaceAfter=6))
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("Project Date\n")
+        f.write(f"{now}\n\n")
 
-    report = []
+        f.write("Channels Searched\n")
+        for channel in channels:
+            f.write(f"{channel.title}\n")
+        f.write("\n")
 
-    # Project date
-    report.append(Paragraph("Project Date", styles['Heading']))
-    report.append(Paragraph(now, styles['List']))
+        f.write("Search Terms Used\n")
+        for term in search_terms:
+            f.write(f"{term}\n")
+        f.write("\n")
 
-    # Channels searched
-    report.append(Paragraph("Channels Searched", styles['Heading']))
-    for channel in channels:
-        report.append(Paragraph(channel.title, styles['List']))
+        f.write("Summary Stats\n")
+        num_results = len(all_results)
+        date_range = (all_results['time'].min(), all_results['time'].max())
 
-    # Search terms used
-    report.append(Paragraph("Search Terms Used", styles['Heading']))
-    for term in search_terms:
-        report.append(Paragraph(term, styles['List']))
+        f.write(f"Number of results: {num_results}\n")
+        f.write(f"Date range of results: {date_range[0]} - {date_range[1]}\n\n")
 
-    # Summary stats
-    report.append(Paragraph("Summary Stats", styles['Heading']))
-    num_results = len(all_results)
-    date_range = (all_results['time'].min(), all_results['time'].max())
-
-    report.append(Paragraph(f"Number of results: {num_results}", styles['List']))
-    report.append(Paragraph(f"Date range of results: {date_range[0]} - {date_range[1]}", styles['List']))
-
-    # Most common channels
-    report.append(Paragraph("Most Common Channels", styles['Heading']))
-    channel_counts = Counter(all_results['channel_id']).most_common()
-    channel_table_data = [["Channel ID", "Count"]]
-    for channel_id, count in channel_counts:
-        channel_table_data.append([channel_id, count])
-
-    table = Table(channel_table_data)
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-        ('FONTSIZE', (0, 0), (-1, 0), 14),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black)
-    ]))
-    report.append(table)
-
-    # Build the report
-    doc.build(report)
+        f.write("Most Common Channels\n")
+        channel_counts = Counter(all_results['channel_id']).most_common()
+        for channel_id, count in channel_counts:
+            f.write(f"Channel ID: {channel_id}, Count: {count}\n")
 
     print(f"Saved {output_file}")
+
 
 ########################################################################
 

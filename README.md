@@ -27,6 +27,12 @@ Install the required Python dependencies using pip:
 
 ```pip install -r requirements.txt```
 
+# Features
+- Graph adjusts scale to oldest and newest posts.
+- CSV generated for further processing.
+- HTML file generated for opening links.
+- Generates report documenting the key details of the scrape (date, channels accessed, etc) for auditability of findings.
+
 # Usage:
 
 
