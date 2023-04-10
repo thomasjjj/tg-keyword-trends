@@ -35,7 +35,6 @@ def create_output_directory(directory_name):
     print('Directory created.')
     return directory_name
 
-
 def open_file_dialog():
     """
    Opens a file dialog to allow the user to select a .txt file.
@@ -54,8 +53,6 @@ def open_file_dialog():
     file_path = filedialog.askopenfilename(title="Select the search terms file", filetypes=[("Text files", "*.txt")])
     root.destroy()  # Destroy the window after the dialog is closed
     return file_path
-
-
 
 def check_search_terms_file(file_path):
     if not os.path.exists(file_path):
@@ -77,11 +74,9 @@ def check_search_terms_file(file_path):
 
     return search_terms
 
-
 def render_url(url):
     """Return an HTML link for a given URL."""
     return f'<a href="{url}">{url}</a>'
-
 
 def retrieve_api_details():
     """
@@ -111,7 +106,6 @@ def retrieve_api_details():
 
     print('API ID retrieved: ' + str(api_id) + " ¦ API Hash retrieved: " + api_hash + "\n")
     return api_id, api_hash
-
 
 def plot_keyword_frequency(dataframes_dict, output_folder):
     """
@@ -176,7 +170,6 @@ def plot_keyword_frequency(dataframes_dict, output_folder):
     # Idiot alert - I spent hours debugging the code because it didn't work after this stage.
     # The block=false is mandatory so it runs in the background while the graph shows
 
-
 def generate_report(all_results, channels, search_terms, output_folder, now):
     """
     Generates a text report summarizing the search results for a list of channels and search terms.
@@ -203,6 +196,8 @@ def generate_report(all_results, channels, search_terms, output_folder, now):
         f.write("Summary Stats\n")
         num_results = len(all_results)
         date_range = (all_results['time'].min(), all_results['time'].max())
+        f.write(f"Number of results: {num_results}\n")
+        f.write(f"Date range of results: {date_range[0]} - {date_range[1]}\n\n")
 
         f.write("Channels Searched\n")
         for channel in channels:
