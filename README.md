@@ -1,4 +1,6 @@
 # Telegram Keyword Trends
+###### Screenshot of tool in action
+[![Screenshot of tool in action](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")
 
 **This script searches messages containing specified search terms in Telegram channels the user is a member of. It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day.**
 
