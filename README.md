@@ -8,6 +8,10 @@ It is designed to monitor trends of search terms in much the same way that Googl
 [![Example result exploring hate speech during the Russian full-scale invasion of Ukraine](https://user-images.githubusercontent.com/118008765/230750727-0a4f74db-9ab2-41df-b49a-c1ec2c785753.png "Example result exploring hate speech during the Russian full-scale invasion of Ukraine")](https://user-images.githubusercontent.com/118008765/230750727-0a4f74db-9ab2-41df-b49a-c1ec2c785753.png "Example result exploring hate speech during the Russian full-scale invasion of Ukraine")
 *This image is an example result showing how the channels under investigation saw a surge in usage of specific terms.*
 
+###### Screenshot of some of the information generated in the report
+
+[![Screenshot of some of the information generated in the report](https://user-images.githubusercontent.com/118008765/230942324-d42d96da-8df4-4a87-8201-360852b2f662.png "xxx")](https://user-images.githubusercontent.com/118008765/230942324-d42d96da-8df4-4a87-8201-360852b2f662.png "xxx")
+
 This tool has been tested on English and Russian language search terms.
 
 ***Currently English has full functionality and the tool works well with Cyrillic, but the generated report may have a few issues. All other features should work as expected.***
