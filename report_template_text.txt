@@ -1,0 +1,9 @@
+This report contains graphs showing how often certain words or phrases have been used in specific Telegram channels over time. It is generated automatically as part of the tool, which is designed to monitor trends in discussions on the Telegram chat platform.
+
+The tool is intended to help identify emerging themes, such as hate speech or disinformation, by highlighting patterns in how certain words or phrases are used. By comparing these patterns to known events or trends, it may be possible to gain insights into the discussions taking place in these channels.
+
+However, it's important to note that the graphs in this report should be viewed as a starting point for further analysis. While they can be helpful in identifying potential issues, they don't take into account the overall level of activity in these channels. This means that a spike in the frequency of certain words or phrases may not necessarily indicate a corresponding increase in overall activity.
+
+As such, it's important to conduct further research and statistical analysis before drawing any conclusions from the data presented in this report.
+
+This tool can be analysed at https://github.com/thomasjjj/tg-keyword-trends

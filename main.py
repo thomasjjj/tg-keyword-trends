@@ -16,6 +16,9 @@ import textwrap
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image, PageBreak, Preformatted, XPreformatted
 from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib.units import mm
+from reportlab.pdfgen import canvas
+from reportlab.platypus import PageTemplate, BaseDocTemplate, Frame
 
 
 
@@ -284,13 +287,45 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         # Idiot alert - I spent hours debugging the code because it didn't work after this stage.
         # The block=false is mandatory, so it runs in the background while the graph shows
 
+    class NumberedCanvas(canvas.Canvas):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._code = []
+
+        def showPage(self):
+            self._code.append("canvas.showPage()")
+            super().showPage()
+
+        def save(self):
+            page_count = len(self._pages)
+            for i, code in enumerate(self._code):
+                self._pageNumber = i + 1
+                self.setFont("Helvetica", 9)
+                self.drawRightString(200 * mm, 10 * mm, f"Page {i + 1} of {page_count}")
+                eval(code)
+            super().save()
+
+    class NumberedDocTemplate(BaseDocTemplate):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.addPageTemplates([PageTemplate(id='All', frames=[self.createFrame()], onPage=self.addPageNumber)])
+
+        def createFrame(self):
+            return Frame(self.leftMargin, self.bottomMargin, self.width, self.height, id='normal')
+
+        def addPageNumber(self, canvas, doc):
+            canvas.saveState()
+            canvas.setFont('Helvetica', 9)
+            canvas.drawCentredString(105 * mm, 20 * mm, f"Page {canvas._pageNumber}")
+            canvas.restoreState()
+
     def generate_pdf(all_results, output_folder, dataframes_dict):
         pdf_filename = os.path.join(output_folder, 'graphs.pdf')
-        doc = SimpleDocTemplate(pdf_filename, pagesize=letter)
+        doc = NumberedDocTemplate(pdf_filename, pagesize=letter)
+        canvas = NumberedCanvas(doc)
 
         # Collect the basic statistics of the process as a result overview
         num_results = len(all_results)
-        date_range = (all_results['time'].min(), all_results['time'].max())
         number_of_results = f"Number of results: {num_results}"
         date_range = (all_results['time'].min(), all_results['time'].max())
         date_range_of_results = f"Date range of results: {date_range[0]} - {date_range[1]}\n\n"
@@ -303,7 +338,17 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         title = Paragraph(f"Telegram Keyword Trend Analysis {now}", title_style)
         subheading = Paragraph(f"Digital scraping of Telegram channels to extract frequency and trends of keyword use",
                                subheading_style)
-        intro_text = Paragraph(f"This report contains graphs showing the frequency of search terms over time across the specified channels.", intro_text_style)
+
+        # Open the file with the report intro text
+        with open(r"report_template_text.txt", "r") as file:
+            # Read the contents of the file into a string
+            intro_text = file.read()
+        # Split the text into individual lines and wrap each line in HTML tags to format the text size
+        intro_text_lines = [f"<font size='9'>{line}</font>" for line in intro_text.split("\n")]
+        # Join the lines back together into a single string with line breaks between each line
+        intro_text = "\n".join(intro_text_lines)
+        # Create a new Paragraph object using the formatted text and the specified style
+        intro_text = Paragraph(intro_text, intro_text_style)
 
         result_summary_number = Paragraph(f"{number_of_results}", intro_text_style)
         result_summary_date_range = Paragraph(f"{date_range_of_results}", intro_text_style)
@@ -316,6 +361,8 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         story.append(intro_text)
         story.append(result_summary_number)
         story.append(result_summary_date_range)
+
+        story.append(PageBreak())  # Add a page break here
 
         # Calculate the maximum image width to fit within the PDF page
         max_image_width = letter[0] - 2 * doc.leftMargin
