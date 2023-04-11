@@ -1,6 +1,10 @@
 # Telegram Keyword Trends
 An analysis tool to explore the emergence of hatespeech, disinformation, and narratives of interest on the Telegram chat platform. Please use this tool with caution as it does not have content moderation or filtering. You are responsible for the content that may be exported.
 
+###### Screenshot of tool in action, exploring hate speech during the Russian full-scale invasion of Ukraine
+[![Screenshot of tool in action](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")
+
+
 ##### Key Features
 - This tool is designed to work with sockpuppets that follow many channels covering a particular topic.
 - You can change your API details to use different accounts by editing the **api_values.txt** file.
@@ -13,8 +17,6 @@ An analysis tool to explore the emergence of hatespeech, disinformation, and nar
 - Outputs a TXT file summary including all the main stats, e.g, date run, channels searched, and relative volume per channel.
 
 
-###### Screenshot of tool in action, exploring hate speech during the Russian full-scale invasion of Ukraine
-[![Screenshot of tool in action](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")
 
 This script searches messages containing specified search terms in Telegram channels the user is a member of. It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day.
 
