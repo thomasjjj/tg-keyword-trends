@@ -8,9 +8,20 @@ import pandas as pd
 from telethon.sync import TelegramClient
 from telethon.tl.types import InputPeerChannel
 from colorama import Style, Fore
+from datetime import datetime
 import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog
+from PIL import Image as PILImage
+import textwrap
+from pygments import highlight
+from pygments.lexers import PythonLexer
+from pygments.formatters import HtmlFormatter
+from reportlab.lib.pagesizes import letter
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image, PageBreak, Preformatted, XPreformatted
+from reportlab.lib.styles import ParagraphStyle
+from reportlab.lib import colors
+
 
 
 description = r"""
@@ -32,6 +43,8 @@ WARNING = r"""
 WARNING: This tool uses your list of followed groups as the list it searches from. It may include personal chats/groups.
          For the sake of OPSEC, it is recommended to use a burner account and follow only investigation-specific chats.
 """
+
+
 
 def printC(string, colour):
     '''Print coloured and then reset: The "colour" variable should be written as "Fore.GREEN" (or other colour) as it
@@ -162,67 +175,231 @@ def render_url(url):
     """Return an HTML link for a given URL."""
     return f'<a href="{url}">{url}</a>'
 
-def plot_keyword_frequency(dataframes_dict, output_folder):
-    """
-    Creates a line plot of the frequency of each keyword over time, based on a dictionary of Pandas DataFrames.
+def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
+    def plot_keyword_frequency_per_channel(dataframes_dict, output_folder):
+        min_date = None
+        max_date = None
 
-    The function concatenates all DataFrames for each keyword, resamples the data by day, and plots the count of messages
-    per day. The resulting plot is saved as a PNG file in the specified output directory.
+        # Find the overall min and max dates
+        for search_term, dataframes in dataframes_dict.items():
+            all_results = pd.concat(dataframes, ignore_index=True)
+            all_results['date'] = pd.to_datetime(all_results['time'].str[:11], format='%d/%b/%Y')
 
-    Args:
-        dataframes_dict (dict): A dictionary where each key is a search term and each value is a list of Pandas DataFrames
-                                containing the search results for that term.
-        output_folder (str): The path to the directory where the output file should be saved.
-    """
-    plt.figure(figsize=(14, 6))
+            if min_date is None or all_results['date'].min() < min_date:
+                min_date = all_results['date'].min()
 
-    min_date = None
-    max_date = None
+            if max_date is None or all_results['date'].max() > max_date:
+                max_date = all_results['date'].max()
 
-    # Iterate through each search term and its corresponding DataFrames
-    for search_term, dataframes in dataframes_dict.items():
-        # Concatenate all DataFrames for the current search term
-        all_results = pd.concat(dataframes, ignore_index=True)
+        # Iterate through each search term and its corresponding DataFrames
+        for search_term, dataframes in dataframes_dict.items():
+            plt.figure(figsize=(14, 6))
 
-        # Extract the date from the 'time' column and convert it to a pandas datetime object
-        all_results['date'] = pd.to_datetime(all_results['time'].str[:11], format='%d/%b/%Y')
+            # Concatenate all DataFrames for the current search term
+            all_results = pd.concat(dataframes, ignore_index=True)
 
-        # Update min and max dates
-        if min_date is None or all_results['date'].min() < min_date:
-            min_date = all_results['date'].min()
+            # Extract the date from the 'time' column and convert it to a pandas datetime object
+            all_results['date'] = pd.to_datetime(all_results['time'].str[:11], format='%d/%b/%Y')
 
-        if max_date is None or all_results['date'].max() > max_date:
-            max_date = all_results['date'].max()
+            # Resample the DataFrame by day and count the number of messages per day
+            daily_message_count = all_results.resample('D', on='date').size()
 
-        # Resample the DataFrame by day and count the number of messages per day
-        daily_message_count = all_results.resample('D', on='date').size()
+            # Plot the message count per day for the current search term
+            plt.plot(daily_message_count.index, daily_message_count.values, label=search_term)
 
-        # Plot the message count per day for the current search term
-        plt.plot(daily_message_count.index, daily_message_count.values, label=search_term)
+            # Add vertical lines for each month
+            current_date = min_date.to_period('M').to_timestamp()
+            while current_date < max_date:
+                plt.axvline(current_date, color='gray', linestyle='--', linewidth=0.5)
+                current_date += pd.DateOffset(months=1)
 
-    # Add vertical lines for each month
-    current_date = min_date.to_period('M').to_timestamp()
-    while current_date < max_date:
-        plt.axvline(current_date, color='gray', linestyle='--', linewidth=0.5)
-        current_date += pd.DateOffset(months=1)
+            plt.xlabel('Date')
+            plt.ylabel('Number of Messages')
+            plt.title(f'Number of Messages Returned Per Day for "{search_term}"')
+            plt.legend()
 
-    plt.xlabel('Date')
-    plt.ylabel('Number of Messages')
-    plt.title('Number of Messages Returned Per Day')
-    plt.legend()
+            # Save the plot to a file in the output directory
+            filename = f'message_count_per_day_{search_term}.png'
+            filepath = os.path.join(output_folder, filename)
 
-    # Save the plot to a file in the output directory
-    filename = 'message_count_per_day.png'
-    filepath = os.path.join(output_folder, filename)
+            printC(f'Saving graph as image for "{search_term}"...', Fore.YELLOW)
+            plt.savefig(filepath)
+            printC(f'Saved Graph as image for "{search_term}".', Fore.GREEN)
 
-    printC('Saving graph as image...', Fore.YELLOW)
-    plt.savefig(filepath)
-    printC('Saved Graph as image.', Fore.GREEN)
+            plt.show(block=False)
 
-    plt.show(block=False)
-    # Idiot alert - I spent hours debugging the code because it didn't work after this stage.
-    # The block=false is mandatory, so it runs in the background while the graph shows
+    def plot_keyword_frequency_aggregate(dataframes_dict, output_folder):
+        """
+         Creates a line plot of the frequency of each keyword over time, based on a dictionary of Pandas DataFrames.
+         The function concatenates all DataFrames for each keyword, resamples the data by day, and plots the count of messages
+         per day. The resulting plot is saved as a PNG file in the specified output directory.
+         Args:
+             dataframes_dict (dict): A dictionary where each key is a search term and each value is a list of Pandas DataFrames
+                                     containing the search results for that term.
+             output_folder (str): The path to the directory where the output file should be saved.
+         """
+        plt.figure(figsize=(14, 6))
 
+        min_date = None
+        max_date = None
+
+        # Iterate through each search term and its corresponding DataFrames
+        for search_term, dataframes in dataframes_dict.items():
+            # Concatenate all DataFrames for the current search term
+            all_results = pd.concat(dataframes, ignore_index=True)
+
+            # Extract the date from the 'time' column and convert it to a pandas datetime object
+            all_results['date'] = pd.to_datetime(all_results['time'].str[:11], format='%d/%b/%Y')
+
+            # Update min and max dates
+            if min_date is None or all_results['date'].min() < min_date:
+                min_date = all_results['date'].min()
+
+            if max_date is None or all_results['date'].max() > max_date:
+                max_date = all_results['date'].max()
+
+            # Resample the DataFrame by day and count the number of messages per day
+            daily_message_count = all_results.resample('D', on='date').size()
+
+            # Plot the message count per day for the current search term
+            plt.plot(daily_message_count.index, daily_message_count.values, label=search_term)
+
+        # Add vertical lines for each month
+        current_date = min_date.to_period('M').to_timestamp()
+        while current_date < max_date:
+            plt.axvline(current_date, color='gray', linestyle='--', linewidth=0.5)
+            current_date += pd.DateOffset(months=1)
+
+        plt.xlabel('Date')
+        plt.ylabel('Number of Messages')
+        plt.title('Number of Messages Returned Per Day (All Search Terms)')
+        plt.legend()
+
+        # Save the plot to a file in the output directory
+        filename = 'message_count_per_day.png'
+        filepath = os.path.join(output_folder, filename)
+
+        printC('Saving graph as image...', Fore.YELLOW)
+        plt.savefig(filepath)
+        printC('Saved Graph as image.', Fore.GREEN)
+
+        plt.show(block=False)
+
+        # Idiot alert - I spent hours debugging the code because it didn't work after this stage.
+        # The block=false is mandatory, so it runs in the background while the graph shows
+
+    def generate_pdf(all_results, output_folder, dataframes_dict):
+        def process_highlighted_code(code):
+            code = re.sub(r'<br\s*/?>', '\n', code)
+            code = re.sub(r'<span style="color: (#[0-9a-fA-F]+)">', r'<font color="\1">', code)
+            code = re.sub(r'</span>', '</font>', code)
+            return code
+
+
+        pdf_filename = os.path.join(output_folder, 'graphs.pdf')
+        doc = SimpleDocTemplate(pdf_filename, pagesize=letter)
+
+        # Collect the basic statistics of the process as a result overview
+        num_results = len(all_results)
+        date_range = (all_results['time'].min(), all_results['time'].max())
+        number_of_results = f"Number of results: {num_results}"
+        date_range = (all_results['time'].min(), all_results['time'].max())
+        date_range_of_results = f"Date range of results: {date_range[0]} - {date_range[1]}\n\n"
+
+        title_style = ParagraphStyle('Title', fontSize=14, spaceAfter=16)
+        subheading_style = ParagraphStyle('Subheading', fontSize=11, spaceAfter=8)
+        intro_text_style = ParagraphStyle('IntroText', fontSize=9, spaceAfter=20)
+        code_style = ParagraphStyle('Code', fontName='Courier', fontSize=8, spaceAfter=20)
+
+        title = Paragraph(f"Telegram Keyword Trend Analysis {now}", title_style)
+        subheading = Paragraph(f"Digital scraping of Telegram channels to extract frequency and trends of keyword use",
+                               subheading_style)
+        intro_text = Paragraph(f"This report contains graphs showing the frequency of search terms over time across the specified channels.", intro_text_style)
+
+        result_summary_number = Paragraph(f"{number_of_results}", intro_text_style)
+        result_summary_date_range = Paragraph(f"{date_range_of_results}", intro_text_style)
+
+        story = []
+
+        # Add the title, subheading, and intro text from the PDFContent class
+        story.append(title)
+        story.append(subheading)
+        story.append(intro_text)
+        story.append(result_summary_number)
+        story.append(result_summary_date_range)
+
+        # Calculate the maximum image width to fit within the PDF page
+        max_image_width = letter[0] - 2 * doc.leftMargin
+
+        # Add the aggregated graph to the PDF
+        aggregated_image_path = os.path.join(output_folder, 'message_count_per_day.png')
+
+        # Get the image dimensions using PIL
+        pil_image = PILImage.open(aggregated_image_path)
+        image_width, image_height = pil_image.size
+
+        # Scale the image to fit within the PDF page
+        image_ratio = image_height / image_width
+        new_width = max_image_width
+        new_height = max_image_width * image_ratio
+
+        aggregated_image = Image(aggregated_image_path, width=new_width, height=new_height)
+        story.append(aggregated_image)
+
+        # Add individual search term graphs to the PDF
+        for search_term in dataframes_dict.keys():
+            image_filename = f'message_count_per_day_{search_term}.png'
+            image_path = os.path.join(output_folder, image_filename)
+
+            # Get the image dimensions using PIL
+            pil_image = PILImage.open(image_path)
+            image_width, image_height = pil_image.size
+
+            # Scale the image to fit within the PDF page
+            image_ratio = image_height / image_width
+            new_width = max_image_width
+            new_height = max_image_width * image_ratio
+
+            image = Image(image_path, width=new_width, height=new_height)
+
+            story.append(Spacer(1, 20))  # Add some space before each graph
+            story.append(image)
+
+        # Add main.py content to the PDF
+        story.append(PageBreak())  # Add a page break here
+        # Create a new paragraph style for the code block
+
+        # Add main.py content to the PDF
+        story.append(Spacer(1, 20))
+        story.append(PageBreak())  # Add a page break here
+        story.append(Paragraph("Content of main.py:", subheading_style))
+
+        with open("main.py", "r") as f:
+            main_py_content = f.read()
+
+        # Use Pygments to highlight the Python code
+        formatter = HtmlFormatter(style='default', nowrap=False, noclasses=True, linenos=True)
+        highlighted_code = highlight(main_py_content, PythonLexer(), formatter)
+        highlighted_code = process_highlighted_code(highlighted_code)
+
+        # Convert highlighted code to ReportLab format
+        code_style = ParagraphStyle(
+            'Code',
+            fontName='Courier',
+            fontSize=8,
+            textColor=colors.black,
+            backColor=colors.whitesmoke,
+        )
+        highlighted_code_paragraph = Paragraph(highlighted_code, code_style)
+        story.append(highlighted_code_paragraph)
+
+        doc.build(story)
+        printC('Generated PDF with all graphs.', Fore.GREEN)
+
+
+    plot_keyword_frequency_per_channel(dataframes_dict, output_folder)
+    plot_keyword_frequency_aggregate(dataframes_dict, output_folder)
+    generate_pdf(all_results, output_folder, dataframes_dict)
 def generate_txt_report(all_results, channels, search_terms, output_folder, now):
     """
     Generates a text report summarizing the search results for a list of channels and search terms.
@@ -252,6 +429,8 @@ def generate_txt_report(all_results, channels, search_terms, output_folder, now)
         f.write(f"Number of results: {num_results}\n")
         f.write(f"Date range of results: {date_range[0]} - {date_range[1]}\n\n")
 
+        result_overview = f"Number of results: {num_results}\n Date range of results: {date_range[0]} - {date_range[1]}\n\n"
+
         f.write("Channels Searched\n")
         for channel in channels:
             f.write(f"{channel.title}\n")
@@ -275,6 +454,7 @@ def generate_txt_report(all_results, channels, search_terms, output_folder, now)
 printC(description, Fore.LIGHTYELLOW_EX)
 printC(WARNING, Fore.LIGHTRED_EX)
 client = connect_to_telegram()
+
 
 # Create an empty DataFrame to store the results
 all_results = pd.DataFrame(columns=['time', 'message', 'message_id', 'channel_id', 'search_term', 'link'])
@@ -399,7 +579,7 @@ try:
 
         # plot time graph
         try:
-            plot_keyword_frequency(dataframes_dict, output_folder)
+            plot_keyword_frequency(all_results, dataframes_dict, output_folder, now)
         except Exception as e:
             print(f'Error making chart: {e}')
 
