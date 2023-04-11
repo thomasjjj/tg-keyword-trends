@@ -1,6 +1,18 @@
 # Telegram Keyword Trends
 An analysis tool to explore the emergence of hatespeech, disinformation, and narratives of interest on the Telegram chat platform. Please use this tool with caution as it does not have content moderation or filtering. You are responsible for the content that may be exported.
 
+##### Key Features
+- This tool is designed to work with sockpuppets that follow many channels covering a particular topic.
+- You can change your API details to use different accounts by editing the **api_values.txt** file.
+- The tool is designed to work like Google Trends showing daily volume of key terms and map over time.
+- Date filtering allows you to narrow a search into a shorter time period. If left blank, it automatically scales to the maximum range of the data.
+- The tool uses Telegram search which means it is particularly good for Russian language searches and generally handles word endings well.
+- Generates individual graphs for each key term.
+- Generates aggregated graph showing all key terms in a search on the same graph for comparison.
+- Compiles a report PDF that shows the graphs and prints the full code for auditing of data and validation of evidence.
+- Outputs a TXT file summary including all the main stats, e.g, date run, channels searched, and relative volume per channel.
+
+
 ###### Screenshot of tool in action, exploring hate speech during the Russian full-scale invasion of Ukraine
 [![Screenshot of tool in action](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")
 
@@ -64,6 +76,11 @@ Install the required Python dependencies using pip:
 - **render_url**: Generate HTML code for a hyperlink using a URL and message text.
 - **generate_report**: Generate a report containing search results for each channel.
 - **plot_keyword_frequency**: Plot the message count per day for each search term in a graph.
+
+# Tips:
+- The tool handles timezones automatically and adjusts for them. Be particularly careful when editing any section of the code relating to time and date formats as this was difficult to debug. 
+- It is recommended that you create a dedicated Telegram account for each subject matter. This will allow you to target only relevant channels and removes noise. 
+- You don't need to search singular and plural nouns separately as this is handled by Telegram's search, (generally speaking, for English and Russian language).
 
 # Dependencies:
 
