@@ -77,12 +77,13 @@ Python Version: Python 3.11 or higher
 ------------
 
 - [ ] prevent opened graph png from disappearing
+- [ ] add error handling to user date inputs
 - [x] make graph production per term as well as aggregated to remove scaling issues
 - [x] insert all graphs into PDF report (separate from TXT file report)
 - [x] use the txt report to populate the PDF report with contextual data.
 - [ ] add asyncio options to optimise performance
 - [ ] better graphing, eg percent usage over time to adjust for new channels or surges in activity
-- [ ] time range selection
+- [x] time range selection
 - [ ] custom channel list
 - [ ] wordcloud generation of all matching messages to extract additional context, terms, and insights
 - [ ] set ability to group terms into single line on graph (e.g translations/transliterations)

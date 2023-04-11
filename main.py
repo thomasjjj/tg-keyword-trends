@@ -2,6 +2,8 @@ import os
 import re
 import sys
 import time as t
+import pytz
+import datetime
 from collections import Counter
 import traceback
 import pandas as pd
@@ -14,16 +16,12 @@ from tkinter import filedialog
 from PIL import Image as PILImage
 import textwrap
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image, PageBreak, Preformatted, XPreformatted
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image, PageBreak, Preformatted, PageTemplate, BaseDocTemplate, Frame
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-from reportlab.platypus import PageTemplate, BaseDocTemplate, Frame
 
-
-
-
-description = r"""
+SCRIPT_DESCRIPTION = r"""
 
  _____    _                                  _____                  _     
 |_   _|  | |                                |_   _|                | |    
@@ -38,7 +36,7 @@ By: Tom Jarvis ¦ Twitter: @tomtomjarvis
 This script searches messages containing specified search terms in Telegram channels the user is a member of.
 It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day."""
 
-WARNING = r"""
+SCRIPT_WARNING = r"""
 WARNING: This tool uses your list of followed groups as the list it searches from. It may include personal chats/groups.
          For the sake of OPSEC, it is recommended to use a burner account and follow only investigation-specific chats.
 """
@@ -176,13 +174,37 @@ def render_url(url):
 
 def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
     def plot_keyword_frequency_per_channel(dataframes_dict, output_folder):
+        """
+        Plot the daily frequency of messages containing specific keywords across all channels.
+
+        This function takes a dictionary of DataFrames, where each key is a search term and the
+        corresponding value is a list of DataFrames containing the search results for that term.
+        It creates a line plot for each search term, showing the number of messages per day that
+        include the term, and saves the plot as an image in the specified output folder.
+
+        Parameters:
+        ----------
+        dataframes_dict : dict
+            A dictionary containing search terms as keys and lists of DataFrames with search results
+            as values. Each DataFrame should have a 'time' column containing timestamps.
+
+        output_folder : str
+            The path to the folder where the generated plot images should be saved.
+
+        Returns:
+        -------
+        None
+        """
         min_date = None
         max_date = None
 
         # Find the overall min and max dates
         for search_term, dataframes in dataframes_dict.items():
+            if not dataframes:
+                continue
             all_results = pd.concat(dataframes, ignore_index=True)
-            all_results['date'] = pd.to_datetime(all_results['time'].str[:11], format='%d/%b/%Y')
+            all_results['date'] = pd.to_datetime(all_results['time'].astype(str).str[:11].str.strip()).dt.tz_localize(
+                None)
 
             if min_date is None or all_results['date'].min() < min_date:
                 min_date = all_results['date'].min()
@@ -192,13 +214,17 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
 
         # Iterate through each search term and its corresponding DataFrames
         for search_term, dataframes in dataframes_dict.items():
+            if not dataframes:  # Add this condition to check if the dataframes list is not empty
+                print(f"No data available for search term: {search_term}")
+                continue
             plt.figure(figsize=(14, 6))
 
             # Concatenate all DataFrames for the current search term
             all_results = pd.concat(dataframes, ignore_index=True)
 
             # Extract the date from the 'time' column and convert it to a pandas datetime object
-            all_results['date'] = pd.to_datetime(all_results['time'].str[:11], format='%d/%b/%Y')
+            all_results['date'] = pd.to_datetime(all_results['time'].astype(str).str[:11].str.strip()).dt.tz_localize(None)
+
 
             # Resample the DataFrame by day and count the number of messages per day
             daily_message_count = all_results.resample('D', on='date').size()
@@ -229,41 +255,35 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
 
     def plot_keyword_frequency_aggregate(dataframes_dict, output_folder):
         """
-         Creates a line plot of the frequency of each keyword over time, based on a dictionary of Pandas DataFrames.
-         The function concatenates all DataFrames for each keyword, resamples the data by day, and plots the count of messages
-         per day. The resulting plot is saved as a PNG file in the specified output directory.
-         Args:
-             dataframes_dict (dict): A dictionary where each key is a search term and each value is a list of Pandas DataFrames
-                                     containing the search results for that term.
-             output_folder (str): The path to the directory where the output file should be saved.
-         """
+        Creates a line plot of the frequency of each keyword over time, based on a dictionary of Pandas DataFrames.
+        The function concatenates all DataFrames for each keyword, resamples the data by day, and plots the count of messages
+        per day. The resulting plot is saved as a PNG file in the specified output directory.
+        Args:
+        dataframes_dict (dict): A dictionary where each key is a search term and each value is a list of Pandas DataFrames
+                                  containing the search results for that term.
+        output_folder (str): The path to the directory where the output file should be saved.
+        """
         plt.figure(figsize=(14, 6))
 
-        min_date = None
-        max_date = None
+        min_date, max_date = None, None
 
-        # Iterate through each search term and its corresponding DataFrames
-        for search_term, dataframes in dataframes_dict.items():
-            # Concatenate all DataFrames for the current search term
-            all_results = pd.concat(dataframes, ignore_index=True)
+        # Filter search terms with data available
+        search_terms_with_data = {term: dataframes for term, dataframes in dataframes_dict.items() if dataframes}
 
-            # Extract the date from the 'time' column and convert it to a pandas datetime object
-            all_results['date'] = pd.to_datetime(all_results['time'].str[:11], format='%d/%b/%Y')
+        for search_term, dataframes in search_terms_with_data.items():
+            current_results = pd.concat(dataframes, ignore_index=True)
+            current_results['date'] = pd.to_datetime(
+                current_results['time'].astype(str).str[:11].str.strip()).dt.tz_localize(None)
 
-            # Update min and max dates
-            if min_date is None or all_results['date'].min() < min_date:
-                min_date = all_results['date'].min()
+            if min_date is None or current_results['date'].min() < min_date:
+                min_date = current_results['date'].min()
 
-            if max_date is None or all_results['date'].max() > max_date:
-                max_date = all_results['date'].max()
+            if max_date is None or current_results['date'].max() > max_date:
+                max_date = current_results['date'].max()
 
-            # Resample the DataFrame by day and count the number of messages per day
-            daily_message_count = all_results.resample('D', on='date').size()
-
-            # Plot the message count per day for the current search term
+            daily_message_count = current_results.resample('D', on='date').size()
             plt.plot(daily_message_count.index, daily_message_count.values, label=search_term)
 
-        # Add vertical lines for each month
         current_date = min_date.to_period('M').to_timestamp()
         while current_date < max_date:
             plt.axvline(current_date, color='gray', linestyle='--', linewidth=0.5)
@@ -274,13 +294,12 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         plt.title('Number of Messages Returned Per Day (All Search Terms)')
         plt.legend()
 
-        # Save the plot to a file in the output directory
         filename = 'message_count_per_day.png'
         filepath = os.path.join(output_folder, filename)
 
         printC('Saving graph as image...', Fore.YELLOW)
         plt.savefig(filepath)
-        printC('Saved Graph as image.', Fore.GREEN)
+        printC('Saved Aggregated Graph as image.', Fore.GREEN)
 
         plt.show(block=False)
 
@@ -320,11 +339,13 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
             canvas.restoreState()
 
     def generate_pdf(all_results, output_folder, dataframes_dict):
-        pdf_filename = os.path.join(output_folder, 'graphs.pdf')
+        if isinstance(all_results, list):
+            all_results = pd.DataFrame(all_results)
+
+        pdf_filename = os.path.join(output_folder, f'Telegram_Keyword_Trends_Report_{now}.pdf')
         doc = NumberedDocTemplate(pdf_filename, pagesize=letter)
         canvas = NumberedCanvas(doc)
 
-        # Collect the basic statistics of the process as a result overview
         num_results = len(all_results)
         number_of_results = f"Number of results: {num_results}"
         date_range = (all_results['time'].min(), all_results['time'].max())
@@ -339,73 +360,55 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         subheading = Paragraph(f"Digital scraping of Telegram channels to extract frequency and trends of keyword use",
                                subheading_style)
 
-        # Open the file with the report intro text
         with open(r"report_template_text.txt", "r") as file:
-            # Read the contents of the file into a string
             intro_text = file.read()
-        # Split the text into individual lines and wrap each line in HTML tags to format the text size
-        intro_text_lines = [f"<font size='9'>{line}</font>" for line in intro_text.split("\n")]
-        # Join the lines back together into a single string with line breaks between each line
-        intro_text = "\n".join(intro_text_lines)
-        # Create a new Paragraph object using the formatted text and the specified style
-        intro_text = Paragraph(intro_text, intro_text_style)
+        intro_text = Paragraph(f"{intro_text}", intro_text_style)
 
         result_summary_number = Paragraph(f"{number_of_results}", intro_text_style)
         result_summary_date_range = Paragraph(f"{date_range_of_results}", intro_text_style)
 
         story = []
 
-        # Add the title, subheading, and intro text from the PDFContent class
         story.append(title)
         story.append(subheading)
         story.append(intro_text)
         story.append(result_summary_number)
         story.append(result_summary_date_range)
 
-        story.append(PageBreak())  # Add a page break here
+        story.append(PageBreak())
 
-        # Calculate the maximum image width to fit within the PDF page
-        max_image_width = letter[0] - 2 * doc.leftMargin
-
-        # Add the aggregated graph to the PDF
         aggregated_image_path = os.path.join(output_folder, 'message_count_per_day.png')
 
-        # Get the image dimensions using PIL
         pil_image = PILImage.open(aggregated_image_path)
+        max_image_width = letter[0] - 2 * doc.leftMargin
         image_width, image_height = pil_image.size
-
-        # Scale the image to fit within the PDF page
         image_ratio = image_height / image_width
         new_width = max_image_width
         new_height = max_image_width * image_ratio
-
         aggregated_image = Image(aggregated_image_path, width=new_width, height=new_height)
+
         story.append(aggregated_image)
 
-        # Add individual search term graphs to the PDF
         for search_term in dataframes_dict.keys():
             image_filename = f'message_count_per_day_{search_term}.png'
             image_path = os.path.join(output_folder, image_filename)
 
-            # Get the image dimensions using PIL
-            pil_image = PILImage.open(image_path)
-            image_width, image_height = pil_image.size
+            try:
+                pil_image = PILImage.open(image_path)
+                image_width, image_height = pil_image.size
 
-            # Scale the image to fit within the PDF page
-            image_ratio = image_height / image_width
-            new_width = max_image_width
-            new_height = max_image_width * image_ratio
+                image_ratio = image_height / image_width
+                new_width = max_image_width
+                new_height = max_image_width * image_ratio
 
-            image = Image(image_path, width=new_width, height=new_height)
+                image = Image(image_path, width=new_width, height=new_height)
 
-            story.append(Spacer(1, 20))  # Add some space before each graph
-            story.append(image)
+                story.append(Spacer(1, 20))
+                story.append(image)
+            except FileNotFoundError:
+                print(f"Error: File '{image_path}' not found. Skipping this search term.")
 
-        # Add main.py content to the PDF
-        story.append(PageBreak())  # Add a page break here
-        # Create a new paragraph style for the code block
-
-        # Add a title for the code overview
+        story.append(PageBreak())
         title_of_code_overview = Paragraph(f"Code used", title_style)
         story.append(title_of_code_overview)
         story.append(Paragraph("Content of main.py:", subheading_style))
@@ -425,9 +428,24 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         printC('Generated PDF with all graphs.', Fore.GREEN)
 
 
-    plot_keyword_frequency_per_channel(dataframes_dict, output_folder)
-    plot_keyword_frequency_aggregate(dataframes_dict, output_folder)
-    generate_pdf(all_results, output_folder, dataframes_dict)
+    # Run Plotting tools
+    try:
+        plot_keyword_frequency_per_channel(dataframes_dict, output_folder)
+    except Exception as e:
+        print(f"Error making per-channel chart: {type(e).__name__}: {str(e)}\n Traceback:")
+        traceback.print_exc()
+
+    try:
+        plot_keyword_frequency_aggregate(dataframes_dict, output_folder)
+    except Exception as e:
+        print(f"Error making aggregate chart: {type(e).__name__}: {str(e)}\n Traceback:")
+        traceback.print_exc()
+
+    try:
+        generate_pdf(all_results, output_folder, dataframes_dict)
+    except Exception as e:
+        print(f"Error making PDF: {type(e).__name__}: {str(e)}\n Traceback:")
+        traceback.print_exc()
 def generate_txt_report(all_results, channels, search_terms, output_folder, now):
     """
     Generates a text report summarizing the search results for a list of channels and search terms.
@@ -479,37 +497,41 @@ def generate_txt_report(all_results, channels, search_terms, output_folder, now)
 
 ########################################################################
 
-printC(description, Fore.LIGHTYELLOW_EX)
-printC(WARNING, Fore.LIGHTRED_EX)
-client = connect_to_telegram()
+printC(SCRIPT_DESCRIPTION, Fore.LIGHTYELLOW_EX)
+printC(SCRIPT_WARNING, Fore.LIGHTRED_EX)
 
+client = connect_to_telegram()
+dialogs = client.get_dialogs()  # Get all the channels you are a member of
 
 # Create an empty DataFrame to store the results
 all_results = pd.DataFrame(columns=['time', 'message', 'message_id', 'channel_id', 'search_term', 'link'])
 
-# Get all the channels you are a member of
-dialogs = client.get_dialogs()
-
-printC('Select the .txt file with search terms.'
-              'Each search term should be on a new line.', Fore.BLUE)
-
-# search_terms_file = 'search_terms.txt'  # Commented out to allow for file search dialogue
-search_terms_file = open_file_dialog()  # Open TKinter file dialogue -- switch with line above for txt file in directory
-
-search_terms = check_search_terms_file(search_terms_file)
-
-# Initialize dataframes_dict with empty lists
-dataframes_dict = {search_term: [] for search_term in search_terms}
+printC('Select the .txt file with search terms. Each search term should be on a new line.', Fore.BLUE)
+# search_terms_file = 'search_terms.txt'    # Commented out to allow for file search dialogue
+search_terms_file = open_file_dialog()      # Open TKinter file dialogue - switch with line above for txt file in dir
+search_terms = check_search_terms_file(search_terms_file)               # retrieve search terms
+dataframes_dict = {search_term: [] for search_term in search_terms}     # Initialize dataframes_dict with empty lists
 
 count = 0
 total_channels = sum(1 for dialog in dialogs if dialog.is_channel)
 start_time = t.time()
 
 # colour codes assigned for readability (call the escape sequences with {colour_name} in string
-reset_colour = '\033[0m'
-green_colour = '\033[32m'
-yellow_colour = '\033[33m'
-pink_colour = '\x1b[38;2;255;20;147m'
+reset_colour, green_colour, yellow_colour, pink_colour = '\033[0m', '\033[32m', '\033[33m', '\x1b[38;2;255;20;147m'
+
+
+# -- Get user input for start and end dates, and convert them to timezone-aware datetime objects.
+# -- These timezone-aware datetime objects are needed to compare message dates with the specified date range.
+# -- The start date is set to the beginning of the day (hour=0, minute=0, second=0, microsecond=0), and the end date is
+#    set to the end of the day (hour=23, minute=59, second=59, microsecond=999999).
+# -- This ensures that messages are filtered correctly based on the user-specified date range.
+# -- If the user does not provide a start date or end date, the corresponding variable is set to None, which will not
+#    restrict the search by that date boundary.
+start_date_str = input("Enter the start date (dd/mm/yyyy) or leave it blank for no start date: ")
+end_date_str = input("Enter the end date (dd/mm/yyyy) or leave it blank for no end date: ")
+start_date = datetime.datetime.strptime(start_date_str, "%d/%m/%Y").replace(hour=0, minute=0, second=0, microsecond=0).astimezone(pytz.UTC) if start_date_str.strip() else None
+end_date = datetime.datetime.strptime(end_date_str, "%d/%m/%Y").replace(hour=23, minute=59, second=59, microsecond=999999).astimezone(pytz.UTC) if end_date_str.strip() else None
+
 
 
 # Iterate over each channel and process its messages
@@ -529,18 +551,20 @@ for dialog in dialogs:
             # Prints the "searching" statement and allows it to be overwritten
             print(f"{yellow_colour}Searching term: {reset_colour}" + search_string + "... [RUNNING]", end='', flush=True)
 
-            messages = []
-            time = []
-            message_ids = []
+            messages, time, message_ids = [], [], []
+
             # Perform a case-insensitive search using regular expressions
             pattern = re.compile(search_string, re.IGNORECASE)
             # Convert the pattern to a string
             search_string = pattern.pattern
 
             for message in client.iter_messages(channel, search=search_string):
-                messages.append(message.message)    # get messages
-                time.append(message.date)           # get timestamp
-                message_ids.append(message.id)
+                # Filter messages within the specified date range
+                if (start_date is None or message.date >= start_date) and (end_date is None or message.date <= end_date):
+
+                    messages.append(message.message)  # get messages
+                    time.append(message.date)  # get timestamp
+                    message_ids.append(message.id)
 
             if messages:  # If messages list is not empty
                 channel_id = channel.channel_id if channel.channel_id else channel.chat_id
@@ -548,15 +572,15 @@ for dialog in dialogs:
                 data['search_term'] = search_string  # Add the search term to the data
                 df = pd.DataFrame(data)
                 df['link'] = 'https://t.me/c/' + str(channel_id) + '/' + df['message_id'].astype(str)
-                df['time'] = df['time'].apply(lambda x: x.strftime('%d/%b/%Y'))
+
+                # removed to keep the dates in their original datetime format in the all_results DataFrame (otherwise graph creation is broken)
+                # df['time'] = df['time'].apply(lambda x: x.strftime('%d/%b/%Y'))
 
                 # Overwrites the "searching" statement and adds a white tick at the start with retrieved results
-                print(
-                    f'\r{reset_colour}✓{green_colour}Searched term: {reset_colour}{search_string} - {green_colour}Results: {len(messages)}{reset_colour}', flush=True)
+                print(f'\r{reset_colour}✓{green_colour}Searched term: {reset_colour}{search_string} - {green_colour}Results: {len(messages)}{reset_colour}', flush=True)
 
                 # --- Uncomment for printing the dataframes (not recommended as it is messy)
-                # print(f"{dialog.title}")
-                # print(df[['time', 'message', 'link']])
+                # print(f"{dialog.title}\n" + df[['time', 'message', 'link']])
 
                 # Append the results to the all_results DataFrame
                 all_results = pd.concat([all_results, pd.DataFrame(data)], ignore_index=True)
@@ -564,7 +588,6 @@ for dialog in dialogs:
                 dataframes_dict[search_string].append(df)  # This line is modified
                 # Wait for 1 seconds to avoid rate limits - going lower seems to cause issues
                 t.sleep(1)
-
             else:
                 # Overwrites the "searching" statement and adds a white tick at the start with "No Results""
                 print(f'\r{reset_colour}✓{green_colour}Searched term: {reset_colour}{search_string} - {yellow_colour}No results{reset_colour}', flush=True)
@@ -572,13 +595,11 @@ for dialog in dialogs:
         # Run the ETA
         progress_display(start_time, total_channels, count)  # Runs the progress bar and the ETA
 
-
         # Print a nice pink separator
         print(f'{pink_colour}-------------------------------------------------------------------------------------------' + '\x1b[0m')
 
 
 try:
-
     now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
     output_folder = create_output_directory(f'TG-Search_{now}')
 
@@ -606,19 +627,17 @@ try:
             print(f'Error making CSV: {e}')
 
         # plot time graph
-        try:
-            plot_keyword_frequency(all_results, dataframes_dict, output_folder, now)
-        except Exception as e:
-            print(f'Error making chart: {e}')
+        plot_keyword_frequency(all_results, dataframes_dict, output_folder, now)
 
-        # Generate the report
+
+        # Generate the .txt report
         try:
-            printC('Generating report...', Fore.YELLOW)
+            printC('Generating .txt report...', Fore.YELLOW)
             channels = [dialog for dialog in dialogs if dialog.is_channel]
             generate_txt_report(all_results, channels, search_terms, output_folder, now)
-            printC('Report generated.', Fore.GREEN)
+            printC('Report .txt generated.', Fore.GREEN)
         except Exception as e:
-            print(f'Error generating report: {e}')
+            print(f'Error generating .txt report: {e}')
             traceback.print_exc()
 
     except ValueError as e:
