@@ -4,7 +4,7 @@ An analysis tool to explore the emergence of hatespeech, disinformation, and nar
 ###### Screenshot of tool in action, exploring hate speech during the Russian full-scale invasion of Ukraine
 [![Screenshot of tool in action](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")
 
-**This script searches messages containing specified search terms in Telegram channels the user is a member of. It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day.**
+This script searches messages containing specified search terms in Telegram channels the user is a member of. It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day.
 
 It is designed to monitor trends of search terms in much the same way that Google Trends does. This can be very useful for identifying the emergence of hatespeech or discussion/narratives following certain events.
 
@@ -14,7 +14,11 @@ This current version does not do any significant adjustment to the data, for exa
 [![Example result exploring hate speech during the Russian full-scale invasion of Ukraine](https://user-images.githubusercontent.com/118008765/230750727-0a4f74db-9ab2-41df-b49a-c1ec2c785753.png "Example result exploring hate speech during the Russian full-scale invasion of Ukraine")](https://user-images.githubusercontent.com/118008765/230750727-0a4f74db-9ab2-41df-b49a-c1ec2c785753.png "Example result exploring hate speech during the Russian full-scale invasion of Ukraine")
 *This image is an example result showing how the channels under investigation saw a surge in usage of specific terms.*
 
-###### Screenshot of some of the information generated in the report
+###### Example of the report generated 
+[![Example of the report generated](https://user-images.githubusercontent.com/118008765/231264336-74be2122-dcec-4146-ac51-a5062a79e436.png "Example of the report generated")](https://user-images.githubusercontent.com/118008765/231264336-74be2122-dcec-4146-ac51-a5062a79e436.png "Example of the report generated")
+*This image is an example result from the report, a PDF document that outlines the code and prints the script at the end. This means that no matter what changes or what version of the script is being used, the exact process can be scrutinised.*
+
+###### Screenshot of some of the information generated in the txt stats report
 
 [![Screenshot of some of the information generated in the report](https://user-images.githubusercontent.com/118008765/230942324-d42d96da-8df4-4a87-8201-360852b2f662.png "xxx")](https://user-images.githubusercontent.com/118008765/230942324-d42d96da-8df4-4a87-8201-360852b2f662.png "xxx")
 
