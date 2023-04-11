@@ -8,19 +8,15 @@ import pandas as pd
 from telethon.sync import TelegramClient
 from telethon.tl.types import InputPeerChannel
 from colorama import Style, Fore
-from datetime import datetime
 import matplotlib.pyplot as plt
 import tkinter as tk
 from tkinter import filedialog
 from PIL import Image as PILImage
 import textwrap
-from pygments import highlight
-from pygments.lexers import PythonLexer
-from pygments.formatters import HtmlFormatter
 from reportlab.lib.pagesizes import letter
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image, PageBreak, Preformatted, XPreformatted
 from reportlab.lib.styles import ParagraphStyle
-from reportlab.lib import colors
+
 
 
 
@@ -289,13 +285,6 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         # The block=false is mandatory, so it runs in the background while the graph shows
 
     def generate_pdf(all_results, output_folder, dataframes_dict):
-        def process_highlighted_code(code):
-            code = re.sub(r'<br\s*/?>', '\n', code)
-            code = re.sub(r'<span style="color: (#[0-9a-fA-F]+)">', r'<font color="\1">', code)
-            code = re.sub(r'</span>', '</font>', code)
-            return code
-
-
         pdf_filename = os.path.join(output_folder, 'graphs.pdf')
         doc = SimpleDocTemplate(pdf_filename, pagesize=letter)
 
@@ -369,29 +358,21 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         story.append(PageBreak())  # Add a page break here
         # Create a new paragraph style for the code block
 
-        # Add main.py content to the PDF
-        story.append(Spacer(1, 20))
-        story.append(PageBreak())  # Add a page break here
+        # Add a title for the code overview
+        title_of_code_overview = Paragraph(f"Code used", title_style)
+        story.append(title_of_code_overview)
         story.append(Paragraph("Content of main.py:", subheading_style))
 
+        # Wrap the code to fit within the PDF page width
+        max_code_width = letter[0] - 2 * doc.leftMargin
         with open("main.py", "r") as f:
             main_py_content = f.read()
+        wrapped_content = ""
+        for line in main_py_content.split("\n"):
+            wrapped_content += textwrap.fill(line, width=int(max_code_width / 6)) + "\n"
 
-        # Use Pygments to highlight the Python code
-        formatter = HtmlFormatter(style='default', nowrap=False, noclasses=True, linenos=True)
-        highlighted_code = highlight(main_py_content, PythonLexer(), formatter)
-        highlighted_code = process_highlighted_code(highlighted_code)
-
-        # Convert highlighted code to ReportLab format
-        code_style = ParagraphStyle(
-            'Code',
-            fontName='Courier',
-            fontSize=8,
-            textColor=colors.black,
-            backColor=colors.whitesmoke,
-        )
-        highlighted_code_paragraph = Paragraph(highlighted_code, code_style)
-        story.append(highlighted_code_paragraph)
+        main_py_preformatted = Preformatted(wrapped_content, code_style)
+        story.append(main_py_preformatted)
 
         doc.build(story)
         printC('Generated PDF with all graphs.', Fore.GREEN)

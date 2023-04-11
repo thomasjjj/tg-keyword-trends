@@ -2,6 +2,5 @@ pandas~=2.0.0
 matplotlib~=3.7.1
 Telethon~=1.28.2
 colorama~=0.4.6
-reportlab~=3.6.12
 Pillow~=9.5.0
-Pygments~=2.15.0
+reportlab~=3.6.12
