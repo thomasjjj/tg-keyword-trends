@@ -20,6 +20,8 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image, Page
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
+import pickle
+
 
 SCRIPT_DESCRIPTION = r"""
 
@@ -605,6 +607,7 @@ try:
 
     filename_html = os.path.join(output_folder, f'all_results__{now}.html')
     filename_csv = os.path.join(output_folder, f'all_results__{now}.csv')
+    filename_pickle = os.path.join(output_folder, f'all_results__{now}.pickle')
     filename_png = os.path.join(output_folder, f'keyword_frequency__{now}.png')
 
     try:
@@ -625,6 +628,16 @@ try:
             printC(f"Saved {filename_csv}", Fore.GREEN)
         except IOError as e:
             print(f'Error making CSV: {e}')
+
+        # Export to a pickle file -- Makes a more efficient way of adding new modules for additional processing and
+        # prevents rerunning code by having the results in a ready-to-use, optimised format.
+        try:
+            printC('Saving data to a pickle file...', Fore.YELLOW)
+            with open(filename_pickle, 'wb') as f:
+                pickle.dump(all_results, f)
+            printC(f"Saved {filename_pickle}", Fore.GREEN)
+        except IOError as e:
+            print(f'Error saving to pickle file: {e}')
 
         # plot time graph
         plot_keyword_frequency(all_results, dataframes_dict, output_folder, now)
