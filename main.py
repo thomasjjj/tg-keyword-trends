@@ -735,6 +735,7 @@ for dialog in dialogs:
 
                     # Download media files only if the user chose to do so
                     if download_media == 'yes' and message.media:
+
                         current_datetime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
                         media_path = os.path.join(media_folder_path,
                                                   f'media export - tg-keyword-trends - {now}')
