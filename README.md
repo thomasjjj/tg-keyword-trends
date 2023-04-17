@@ -1,6 +1,8 @@
 # Telegram Keyword Trends
 An analysis tool to explore the emergence of hatespeech, disinformation, and narratives of interest on the Telegram chat platform. Please use this tool with caution as it does not have content moderation or filtering. You are responsible for the content that may be exported.
 
+In short, this tool allows you to search all the channels you follow with a list of keywords/phrases and returns all matching results in various formats with graph visualisations. It also optionally downloads the media and thus can be used as a media search engine.
+
 ###### Screenshot of tool in action, exploring hate speech during the Russian full-scale invasion of Ukraine
 [![Screenshot of tool in action](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")](https://user-images.githubusercontent.com/118008765/230943146-8c7fc77f-0b2f-4bf3-8f07-9e3d959ca30c.png "Screenshot of tool in action")
 
@@ -15,6 +17,8 @@ An analysis tool to explore the emergence of hatespeech, disinformation, and nar
 - Generates aggregated graph showing all key terms in a search on the same graph for comparison.
 - Compiles a report PDF that shows the graphs and prints the full code for auditing of data and validation of evidence.
 - Outputs a TXT file summary including all the main stats, e.g, date run, channels searched, and relative volume per channel.
+- Optional media download for results (this massively (like really massively) prolongs the time needed to run the tool)
+- Downloaded media has filename channelid_postid so it is easy to find the original.
 
 
 
@@ -112,8 +116,8 @@ Python Version: Python 3.11 or higher
 - [x] make graph production per term as well as aggregated to remove scaling issues
 - [x] insert all graphs into PDF report (separate from TXT file report)
 - [x] use the txt report to populate the PDF report with contextual data.
-- [ ] add asyncio options to optimise performance
-- [ ] better graphing, eg percent usage over time to adjust for new channels or surges in activity
+- [ ] add asyncio options to optimise performance - particularly for media download.
+- [ ] better graphing, eg percent usage over time to adjust for new channels or surges in activity (ongoing improvements and new graphs - never complete this, just add more)
 - [ ] make sure the above is included in the report pdf
 - [x] time range selection
 - [ ] custom channel list
