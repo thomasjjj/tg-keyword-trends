@@ -1,26 +1,32 @@
+import datetime
 import os
+import pickle
 import re
 import sys
-import time as t
-import pytz
-import datetime
-from collections import Counter
-import traceback
-import pandas as pd
-from telethon.sync import TelegramClient
-from telethon.tl.types import InputPeerChannel
-from colorama import Style, Fore
-import matplotlib.pyplot as plt
-import tkinter as tk
-from tkinter import filedialog
-from PIL import Image as PILImage
 import textwrap
+import time as t
+import tkinter as tk
+import traceback
+from collections import Counter
+from tkinter import filedialog
+import numpy as np
+
+from tqdm import tqdm
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+import pandas as pd
+import pytz
+from PIL import Image as PILImage
+from colorama import Style, Fore
 from reportlab.lib.pagesizes import letter
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Image, PageBreak, Preformatted, PageTemplate, BaseDocTemplate, Frame
 from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
-import pickle
+from reportlab.platypus import Paragraph, Spacer, Image, PageBreak, Preformatted, PageTemplate, BaseDocTemplate, Frame
+from telethon.sync import TelegramClient
+# import stylecloud  # disabled while I fix the wordcloud
+
+
 
 
 SCRIPT_DESCRIPTION = r"""
@@ -42,7 +48,6 @@ SCRIPT_WARNING = r"""
 WARNING: This tool uses your list of followed groups as the list it searches from. It may include personal chats/groups.
          For the sake of OPSEC, it is recommended to use a burner account and follow only investigation-specific chats.
 """
-
 
 
 def printC(string, colour):
@@ -85,8 +90,12 @@ def connect_to_telegram():
         client = TelegramClient('session_name', api_id, api_hash)
         if not client.start():
             sys.exit("Error connecting to Telegram client. Please fix API details in api_values.txt and restart.")
+        print("Connection to Telegram established.")
+        print("Please wait...")
         return client
 
+    # Run the sub-functions and return the client
+    print("Connecting to Telegram...")
     return attempt_connection_to_telegram()  # returns the client created in sub-function
 
 def progress_display(start_time, total_channels, count):
@@ -124,6 +133,7 @@ def progress_display(start_time, total_channels, count):
     progress_message = f"Progress: |{progress_bar}| {progress_percentage * 100:.1f}%"
     printC(time_message, Fore.CYAN)
     printC(progress_message, Fore.CYAN)
+    print(f'{pink_colour}{"-" * 91}\x1b[0m')  # Print a nice pink separator
 
 def create_output_directory(directory_name):
     os.makedirs(directory_name, exist_ok=True)
@@ -149,6 +159,14 @@ def open_file_dialog():
     if not file_path:  # Check if file_path is empty
         sys.exit("Process cancelled.")  # cancel the process if user clicks file dialogue "cancel"
     return file_path
+
+def open_folder_dialog():
+    root = tk.Tk()
+    root.withdraw()
+    root.wm_attributes('-topmost', True)  # Make the window appear on top
+    folder_path = filedialog.askdirectory(parent=root, initialdir="/", title="Please select a directory")
+    root.destroy()
+    return folder_path
 
 def check_search_terms_file(file_path):
     if not os.path.exists(file_path):
@@ -308,6 +326,80 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         # Idiot alert - I spent hours debugging the code because it didn't work after this stage.
         # The block=false is mandatory, so it runs in the background while the graph shows
 
+    def plot_adjusted_keyword_frequency(dataframes_dict, output_folder, now, scale="normal"):
+        fig, ax = plt.subplots(figsize=(14, 6))
+
+        daily_message_count = get_total_daily_messages(dataframes_dict)
+
+        for search_term, dataframes in dataframes_dict.items():
+            if dataframes:
+                current_results = pd.concat(dataframes, ignore_index=True)
+                current_results['date'] = pd.to_datetime(
+                    current_results['time'].astype(str).str[:11].str.strip()).dt.tz_localize(None)
+
+                daily_mentions = current_results.resample('D', on='date').size().to_frame(name='mentions')
+
+                adjusted_daily_mentions = daily_mentions.join(daily_message_count, how='outer')
+                adjusted_daily_mentions['total_messages'].fillna(method='ffill', inplace=True)
+                adjusted_daily_mentions['mentions'].fillna(0, inplace=True)
+
+                adjusted_daily_mentions['cumulative_mentions'] = adjusted_daily_mentions['mentions'].cumsum()
+                adjusted_daily_mentions['cumulative_total_messages'] = adjusted_daily_mentions[
+                    'total_messages'].cumsum()
+
+                adjusted_daily_mentions['ratio'] = 100 * adjusted_daily_mentions['cumulative_mentions'] / \
+                                                   adjusted_daily_mentions['cumulative_total_messages']
+
+                ax.plot(adjusted_daily_mentions.index, adjusted_daily_mentions['ratio'], label=search_term)
+
+        ax.set_xlabel('Date')
+        ax.set_ylabel(f'Cumulative Mentions to Total Messages Ratio ({scale.capitalize()} Scale %)')
+
+        if scale == "normal":
+            ax.set_title('Adjusted Keyword Frequency - Proportion keyword matches vs total messages (Percentages)')
+        else:
+            ax.set_title(
+                'Adjusted Keyword Frequency - Proportion keyword matches vs total messages - (Log Scale Percentages)')
+
+        if scale == "normal":
+            ax.yaxis.set_major_locator(ticker.FixedLocator([100, 50, 10, 1]))
+        else:
+            ax.yaxis.set_major_locator(ticker.FixedLocator([100, 10, 1, 0.1, 0.01]))
+            ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda x, pos: f'{x:,.2f} %'))
+            ax.set_yscale('log')
+
+        plt.setp(ax.get_yticklabels(), rotation=45, ha="right")
+
+        ax.legend()
+
+        filename = f'adjusted_keyword_frequency_{now}_{scale}.png'
+        filepath = os.path.join(output_folder, filename)
+
+        plt.savefig(filepath)
+        plt.show(block=False)
+
+    def get_total_daily_messages(dataframes_dict):
+        all_messages = pd.DataFrame()
+
+        for search_term, dataframes in dataframes_dict.items():
+            for df in dataframes:
+                current_results = df.copy()
+                current_results['id'] = current_results['message'].apply(lambda msg: msg.id)
+                current_results['date'] = pd.to_datetime(
+                    current_results['time'].astype(str).str[:11].str.strip()).dt.tz_localize(None)
+                all_messages = pd.concat([all_messages, current_results], ignore_index=True)
+
+        daily_message_count = all_messages.resample('D', on='date')['id'].agg(lambda x: x.max() - x.min() + 1)
+        daily_message_count.name = 'total_messages'
+        return daily_message_count
+
+    # Wordcloud generator -- -- Disabled for testing
+    '''
+    def generate_wordcloud_from_messages(messages, output_name):
+        all_messages = " ".join([msg.text for msg in messages])
+        stylecloud.gen_stylecloud(text=all_messages, output_name=output_name)
+    '''
+
     class NumberedCanvas(canvas.Canvas):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
@@ -391,6 +483,7 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
 
         story.append(aggregated_image)
 
+        # Add basic keyword per day graphs to the PDF report
         for search_term in dataframes_dict.keys():
             image_filename = f'message_count_per_day_{search_term}.png'
             image_path = os.path.join(output_folder, image_filename)
@@ -410,6 +503,47 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
             except FileNotFoundError:
                 print(f"Error: File '{image_path}' not found. Skipping this search term.")
 
+        # Add adjusted keyword frequency and log-adjusted keyword frequency images to the PDF report
+        for scale in ["normal", "log"]:
+            image_filename = f'adjusted_keyword_frequency_{now}_{scale}.png'
+            image_path = os.path.join(output_folder, image_filename)
+
+            try:
+                pil_image = PILImage.open(image_path)
+                image_width, image_height = pil_image.size
+
+                image_ratio = image_height / image_width
+                new_width = max_image_width
+                new_height = max_image_width * image_ratio
+
+                image = Image(image_path, width=new_width, height=new_height)
+
+                story.append(Spacer(1, 20))
+                story.append(Paragraph(f"Adjusted Keyword Frequency ({scale.capitalize()} Scale):", subheading_style))
+                story.append(image)
+            except FileNotFoundError:
+                print(f"Error: File '{image_path}' not found. Skipping this graph.")
+
+
+        # Add the wordcloud image to the report -- Disabled for testing
+        '''
+        wordcloud_image_path = os.path.join(output_folder,
+                                            f'wordcloud_{now}.png')  # Use the same file name format as in the word cloud generation code
+
+        pil_image = PILImage.open(wordcloud_image_path)
+        max_image_width = letter[0] - 2 * doc.leftMargin
+        image_width, image_height = pil_image.size
+        image_ratio = image_height / image_width
+        new_width = max_image_width
+        new_height = max_image_width * image_ratio
+        wordcloud_image = Image(wordcloud_image_path, width=new_width, height=new_height)
+        
+        story.append(Spacer(1, 20))
+        story.append(Paragraph("Word Cloud:", subheading_style))
+        story.append(wordcloud_image)
+        '''
+
+        # Add the code used to run the script (for auditablity)
         story.append(PageBreak())
         title_of_code_overview = Paragraph(f"Code used", title_style)
         story.append(title_of_code_overview)
@@ -443,11 +577,36 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         print(f"Error making aggregate chart: {type(e).__name__}: {str(e)}\n Traceback:")
         traceback.print_exc()
 
+    # Call the function to create both normal and log y-scale adjusted graphs
+    # Call the function to create *normal* scale adjusted graphs
+    try:
+        plot_adjusted_keyword_frequency(dataframes_dict, output_folder, now)  # Default normal y-scale requested
+    except Exception as e:
+        print(f"Error making adjusted chart (normal scale): {type(e).__name__}: {str(e)}\n Traceback:")
+        traceback.print_exc()
+    # Call the same function to create *log* scale adjusted graphs
+    try:
+        plot_adjusted_keyword_frequency(dataframes_dict, output_folder, now, scale="log")  # With log y-scale requested
+    except Exception as e:
+        print(f"Error making adjusted chart (log scale): {type(e).__name__}: {str(e)}\n Traceback:")
+        traceback.print_exc()
+
+    # Make Wordcloud -- Disabled for testing
+    '''
+    try:
+        all_messages = all_results['message'].tolist()
+        output_name = os.path.join(output_folder, f'wordcloud_{now}.png')
+        generate_wordcloud_from_messages(all_messages, output_name)
+    except FileNotFoundError:
+        print(f"Error: File '{output_name}' not found. Skipping word cloud.")
+    '''
+
     try:
         generate_pdf(all_results, output_folder, dataframes_dict)
     except Exception as e:
         print(f"Error making PDF: {type(e).__name__}: {str(e)}\n Traceback:")
         traceback.print_exc()
+
 def generate_txt_report(all_results, channels, search_terms, output_folder, now):
     """
     Generates a text report summarizing the search results for a list of channels and search terms.
@@ -498,7 +657,7 @@ def generate_txt_report(all_results, channels, search_terms, output_folder, now)
 
 
 ########################################################################
-
+now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
 printC(SCRIPT_DESCRIPTION, Fore.LIGHTYELLOW_EX)
 printC(SCRIPT_WARNING, Fore.LIGHTRED_EX)
 
@@ -514,13 +673,10 @@ search_terms_file = open_file_dialog()      # Open TKinter file dialogue - switc
 search_terms = check_search_terms_file(search_terms_file)               # retrieve search terms
 dataframes_dict = {search_term: [] for search_term in search_terms}     # Initialize dataframes_dict with empty lists
 
-count = 0
-total_channels = sum(1 for dialog in dialogs if dialog.is_channel)
-start_time = t.time()
+count, start_time, total_channels = 0, t.time(), sum(1 for dialog in dialogs if dialog.is_channel)
 
-# colour codes assigned for readability (call the escape sequences with {colour_name} in string
+# colour codes assigned for readability (call the escape sequences with {colour_name} in fstring
 reset_colour, green_colour, yellow_colour, pink_colour = '\033[0m', '\033[32m', '\033[33m', '\x1b[38;2;255;20;147m'
-
 
 # -- Get user input for start and end dates, and convert them to timezone-aware datetime objects.
 # -- These timezone-aware datetime objects are needed to compare message dates with the specified date range.
@@ -534,7 +690,13 @@ end_date_str = input("Enter the end date (dd/mm/yyyy) or leave it blank for no e
 start_date = datetime.datetime.strptime(start_date_str, "%d/%m/%Y").replace(hour=0, minute=0, second=0, microsecond=0).astimezone(pytz.UTC) if start_date_str.strip() else None
 end_date = datetime.datetime.strptime(end_date_str, "%d/%m/%Y").replace(hour=23, minute=59, second=59, microsecond=999999).astimezone(pytz.UTC) if end_date_str.strip() else None
 
+# Add a prompt to ask the user if they want to download media
+download_media = input("Do you want to download media files? (yes/no): ").strip().lower()
 
+# If the user wants to download media, open the folder selection dialog
+if download_media == 'yes':
+    print("Select the folder to save media files.")
+    media_folder_path = open_folder_dialog()
 
 # Iterate over each channel and process its messages
 for dialog in dialogs:
@@ -544,65 +706,78 @@ for dialog in dialogs:
         # Get the channel's InputPeerChannel object
         channel = client.get_input_entity(dialog)
 
+        channels_progress = str(count) + "/" + str(total_channels)  # e.g 5/488 (how many channels processed)
+        # Get the channel_id
+        channel_id = channel.channel_id if channel.channel_id else channel.chat_id
+
+
         # ---- Select what reporting information you want
-        # print(str(count) + "¦ Searching..." + str(channel) + f"{dialog.title}")  # Channel ID details & Channel Name
-        # print(str(count) + "¦ Searching..." + str(channel))  # Just Channel ID details
-        print(str(count) + "/" + str(total_channels) + "¦ Searching Channel: " + f"{dialog.title}")  # Just Channel name
+        # print(channel_progress + "¦ Searching..." + str(channel) + f"{dialog.title}")   # Channel ID details & Channel Name
+        # print(channel_progress + "¦ Searching..." + str(channel))                       # Just Channel ID details
+        print(channels_progress + "¦ Searching Channel: " + f"{dialog.title}")  # Just Channel name
 
         for search_string in search_terms:
             # Prints the "searching" statement and allows it to be overwritten
-            print(f"{yellow_colour}Searching term: {reset_colour}" + search_string + "... [RUNNING]", end='', flush=True)
+            print(f"{yellow_colour}Searching term: {reset_colour}" + search_string + "... [RUNNING]", end='',
+                  flush=True)
 
             messages, time, message_ids = [], [], []
 
-            # Perform a case-insensitive search using regular expressions
-            pattern = re.compile(search_string, re.IGNORECASE)
-            # Convert the pattern to a string
-            search_string = pattern.pattern
+            pattern = re.compile(search_string, re.IGNORECASE)  # Perform a case-insensitive search using regex
+            search_string = pattern.pattern  # Convert the pattern to a string
 
             for message in client.iter_messages(channel, search=search_string):
                 # Filter messages within the specified date range
-                if (start_date is None or message.date >= start_date) and (end_date is None or message.date <= end_date):
+                if (start_date is None or message.date >= start_date) and (
+                        end_date is None or message.date <= end_date):
 
-                    messages.append(message.message)  # get messages
-                    time.append(message.date)  # get timestamp
+                    message_text = message.message  # Extract the message text
+
+                    # Download media files only if the user chose to do so
+                    if download_media == 'yes' and message.media:
+                        current_datetime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                        media_path = os.path.join(media_folder_path,
+                                                  f'media export - tg-keyword-trends - {now}')
+                        if not os.path.exists(media_path):
+                            os.makedirs(media_path)
+                        try:
+                            filename = f"{channel_id}_{message.id}"
+                            file_path = os.path.join(media_path, filename)
+                            with tqdm(desc=f"Downloading {filename}", total=1, unit="B", unit_scale=True) as pbar:
+                                def callback(update_bytes, total_bytes):
+                                    pbar.update(update_bytes - pbar.n)
+                                client.download_media(message, file_path, progress_callback=callback)
+                        except Exception as e:
+                            print(f"\rError downloading media file: {e}  ", flush=True)
+
+                    messages.append(message_text)  # Append the message text
+                    time.append(message.date)  # Get timestamp
                     message_ids.append(message.id)
 
             if messages:  # If messages list is not empty
                 channel_id = channel.channel_id if channel.channel_id else channel.chat_id
-                data = {'time': time, 'message': messages, 'message_id': message_ids, 'channel_id': channel_id}
+                links = ['https://t.me/c/' + str(channel_id) + '/' + str(message_id) for message_id in message_ids]
+                data = {'time': time, 'message': messages, 'message_id': message_ids, 'channel_id': channel_id,
+                        'link': links}
                 data['search_term'] = search_string  # Add the search term to the data
                 df = pd.DataFrame(data)
-                df['link'] = 'https://t.me/c/' + str(channel_id) + '/' + df['message_id'].astype(str)
 
-                # removed to keep the dates in their original datetime format in the all_results DataFrame (otherwise graph creation is broken)
-                # df['time'] = df['time'].apply(lambda x: x.strftime('%d/%b/%Y'))
+                print(
+                    f'\r{reset_colour}✓{green_colour}Searched term: {reset_colour}{search_string} - {green_colour}Results: {len(messages)}{reset_colour}',
+                    flush=True)
 
-                # Overwrites the "searching" statement and adds a white tick at the start with retrieved results
-                print(f'\r{reset_colour}✓{green_colour}Searched term: {reset_colour}{search_string} - {green_colour}Results: {len(messages)}{reset_colour}', flush=True)
-
-                # --- Uncomment for printing the dataframes (not recommended as it is messy)
-                # print(f"{dialog.title}\n" + df[['time', 'message', 'link']])
-
-                # Append the results to the all_results DataFrame
-                all_results = pd.concat([all_results, pd.DataFrame(data)], ignore_index=True)
-                # Add the current DataFrame to the list
-                dataframes_dict[search_string].append(df)  # This line is modified
-                # Wait for 1 seconds to avoid rate limits - going lower seems to cause issues
-                t.sleep(1)
+                all_results = pd.concat([all_results, pd.DataFrame(data)], ignore_index=True)  # Add to all_results DF
+                dataframes_dict[search_string].append(df)  # Add the current DataFrame to the list
             else:
-                # Overwrites the "searching" statement and adds a white tick at the start with "No Results""
-                print(f'\r{reset_colour}✓{green_colour}Searched term: {reset_colour}{search_string} - {yellow_colour}No results{reset_colour}', flush=True)
+                print(
+                    f'\r{reset_colour}✓{green_colour}Searched term: {reset_colour}{search_string} - {yellow_colour}No results{reset_colour}',
+                    flush=True)
 
-        # Run the ETA
-        progress_display(start_time, total_channels, count)  # Runs the progress bar and the ETA
+            t.sleep(1)  # Wait for 1 seconds to avoid rate limits - going lower seems to cause issues
 
-        # Print a nice pink separator
-        print(f'{pink_colour}-------------------------------------------------------------------------------------------' + '\x1b[0m')
-
+        progress_display(start_time, total_channels, count)  # Runs the progress bar
 
 try:
-    now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
     output_folder = create_output_directory(f'TG-Search_{now}')
 
     filename_html = os.path.join(output_folder, f'all_results__{now}.html')
@@ -615,11 +790,14 @@ try:
         try:
             with open(filename_html, 'w', encoding='utf-8') as f:
                 printC('Making HTML output file...', Fore.YELLOW)
+                print("DataFrame before exporting to HTML:")
+                print(all_results)
                 html = all_results.to_html(index=False, formatters={'link': render_url}, escape=False)
                 f.write(html)
                 printC(f"Saved {filename_html}", Fore.GREEN)
         except IOError as e:
             print(f'Error making HTML file: {e}')
+            traceback.print_exc()
 
         # Export to a CSV
         try:
@@ -628,9 +806,10 @@ try:
             printC(f"Saved {filename_csv}", Fore.GREEN)
         except IOError as e:
             print(f'Error making CSV: {e}')
+            traceback.print_exc()
 
-        # Export to a pickle file -- Makes a more efficient way of adding new modules for additional processing and
-        # prevents rerunning code by having the results in a ready-to-use, optimised format.
+        # Export to pickle file -- ERROR currently, disabled for now. Grab data from CSV for further processing instead
+        '''
         try:
             printC('Saving data to a pickle file...', Fore.YELLOW)
             with open(filename_pickle, 'wb') as f:
@@ -638,10 +817,11 @@ try:
             printC(f"Saved {filename_pickle}", Fore.GREEN)
         except IOError as e:
             print(f'Error saving to pickle file: {e}')
+            traceback.print_exc()
+        '''
 
-        # plot time graph
+        # plot all time graphs
         plot_keyword_frequency(all_results, dataframes_dict, output_folder, now)
-
 
         # Generate the .txt report
         try:
@@ -655,12 +835,12 @@ try:
 
     except ValueError as e:
         printC('Error.', Fore.RED)
-
+        traceback.print_exc()
 
 except ValueError as e:
     printC('Error.', Fore.RED)
 
 printC('\nProcess completed', Fore.GREEN)
+client.disconnect()  # Disconnect the Telethon client from the Telegram server
 
-# Disconnect the Telethon client from the Telegram server
-client.disconnect()
+
