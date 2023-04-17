@@ -58,6 +58,7 @@ Install the required Python dependencies using pip:
 - CSV generated for further processing.
 - HTML file generated for opening links.
 - Generates report documenting the key details of the scrape (date, channels accessed, etc) for auditability of findings.
+- Media download
 
 # Usage:
 
@@ -80,18 +81,25 @@ Install the required Python dependencies using pip:
 - **plot_keyword_frequency**: Plot the message count per day for each search term in a graph.
 
 # Tips:
+- Due to the date filtering feature, this tool also works well as a Telegram search engine that allows date-filtered results. Simply run the search in the date window needed and open up the output html file for a list of messages that match and their links.
 - The tool handles timezones automatically and adjusts for them. Be particularly careful when editing any section of the code relating to time and date formats as this was difficult to debug. 
 - It is recommended that you create a dedicated Telegram account for each subject matter. This will allow you to target only relevant channels and removes noise. 
 - You don't need to search singular and plural nouns separately as this is handled by Telegram's search, (generally speaking, for English and Russian language).
 
+[![Demonstration of graph](https://user-images.githubusercontent.com/118008765/232030941-aa506853-48ba-4433-8abf-1ee454ea1e5b.png "Demonstration of graph")](https://user-images.githubusercontent.com/118008765/232030941-aa506853-48ba-4433-8abf-1ee454ea1e5b.png "Demonstration of graph")
+*This image shows the useage of the various placenames for "Bakmut", including the old Soviet names. One use of this tool could be for validating the search terms used in OSINT research. As can be seen here, one may limit their collection potential if they only use the official current name for the city rather than past and controversial names too. *
+
 # Dependencies:
 
-- Telethon
-- pandas
-- matplotlib
-- colorama
-- regex
-- reportlab
+- pandas~=2.0.0
+- matplotlib~=3.7.1
+- Telethon~=1.28.2
+- colorama~=0.4.6
+- Pillow~=9.5.0
+- reportlab~=3.6.12
+- numpy~=1.24.2
+- pytz~=2023.3
+- tqdm~=4.65.0
 
 Python Version: Python 3.11 or higher
 
@@ -106,6 +114,7 @@ Python Version: Python 3.11 or higher
 - [x] use the txt report to populate the PDF report with contextual data.
 - [ ] add asyncio options to optimise performance
 - [ ] better graphing, eg percent usage over time to adjust for new channels or surges in activity
+- [ ] make sure the above is included in the report pdf
 - [x] time range selection
 - [ ] custom channel list
 - [ ] wordcloud generation of all matching messages to extract additional context, terms, and insights
