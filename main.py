@@ -1,5 +1,6 @@
 import datetime
 import os
+import pickle
 import re
 import sys
 import textwrap
@@ -8,6 +9,7 @@ import tkinter as tk
 import traceback
 from collections import Counter
 from tkinter import filedialog
+import numpy as np
 
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -22,9 +24,8 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, Spacer, Image, PageBreak, Preformatted, PageTemplate, BaseDocTemplate, Frame
 from telethon.sync import TelegramClient
+
 # import stylecloud  # disabled while I fix the wordcloud
-
-
 
 
 SCRIPT_DESCRIPTION = r"""
@@ -52,6 +53,7 @@ def printC(string, colour):
     '''Print coloured and then reset: The "colour" variable should be written as "Fore.GREEN" (or other colour) as it
     uses Fore function from colorama.'''
     print(colour + string + Style.RESET_ALL)
+
 
 def connect_to_telegram():
     """
@@ -96,6 +98,7 @@ def connect_to_telegram():
     print("Connecting to Telegram...")
     return attempt_connection_to_telegram()  # returns the client created in sub-function
 
+
 def progress_display(start_time, total_channels, count):
     '''
     Displays the progress of a process by showing a progress bar, percentage,
@@ -133,10 +136,12 @@ def progress_display(start_time, total_channels, count):
     printC(progress_message, Fore.CYAN)
     print(f'{pink_colour}{"-" * 91}\x1b[0m')  # Print a nice pink separator
 
+
 def create_output_directory(directory_name):
     os.makedirs(directory_name, exist_ok=True)
     print('Directory created.')
     return directory_name
+
 
 def open_file_dialog():
     """
@@ -158,6 +163,7 @@ def open_file_dialog():
         sys.exit("Process cancelled.")  # cancel the process if user clicks file dialogue "cancel"
     return file_path
 
+
 def open_folder_dialog():
     root = tk.Tk()
     root.withdraw()
@@ -165,6 +171,7 @@ def open_folder_dialog():
     folder_path = filedialog.askdirectory(parent=root, initialdir="/", title="Please select a directory")
     root.destroy()
     return folder_path
+
 
 def check_search_terms_file(file_path):
     if not os.path.exists(file_path):
@@ -186,9 +193,11 @@ def check_search_terms_file(file_path):
 
     return search_terms
 
+
 def render_url(url):
     """Return an HTML link for a given URL."""
     return f'<a href="{url}">{url}</a>'
+
 
 def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
     def plot_keyword_frequency_per_channel(dataframes_dict, output_folder):
@@ -241,8 +250,8 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
             all_results = pd.concat(dataframes, ignore_index=True)
 
             # Extract the date from the 'time' column and convert it to a pandas datetime object
-            all_results['date'] = pd.to_datetime(all_results['time'].astype(str).str[:11].str.strip()).dt.tz_localize(None)
-
+            all_results['date'] = pd.to_datetime(all_results['time'].astype(str).str[:11].str.strip()).dt.tz_localize(
+                None)
 
             # Resample the DataFrame by day and count the number of messages per day
             daily_message_count = all_results.resample('D', on='date').size()
@@ -522,7 +531,6 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
             except FileNotFoundError:
                 print(f"Error: File '{image_path}' not found. Skipping this graph.")
 
-
         # Add the wordcloud image to the report -- Disabled for testing
         '''
         wordcloud_image_path = os.path.join(output_folder,
@@ -535,7 +543,7 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
         new_width = max_image_width
         new_height = max_image_width * image_ratio
         wordcloud_image = Image(wordcloud_image_path, width=new_width, height=new_height)
-        
+
         story.append(Spacer(1, 20))
         story.append(Paragraph("Word Cloud:", subheading_style))
         story.append(wordcloud_image)
@@ -560,7 +568,6 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
 
         doc.build(story)
         printC('Generated PDF with all graphs.', Fore.GREEN)
-
 
     # Run Plotting tools
     try:
@@ -604,6 +611,7 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
     except Exception as e:
         print(f"Error making PDF: {type(e).__name__}: {str(e)}\n Traceback:")
         traceback.print_exc()
+
 
 def generate_txt_report(all_results, channels, search_terms, output_folder, now):
     """
@@ -655,7 +663,7 @@ def generate_txt_report(all_results, channels, search_terms, output_folder, now)
 
 
 ########################################################################
-now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')  # The now variable is time at tool start, even if called later.
+now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
 printC(SCRIPT_DESCRIPTION, Fore.LIGHTYELLOW_EX)
 printC(SCRIPT_WARNING, Fore.LIGHTRED_EX)
 
@@ -667,9 +675,9 @@ all_results = pd.DataFrame(columns=['time', 'message', 'message_id', 'channel_id
 
 printC('Select the .txt file with search terms. Each search term should be on a new line.', Fore.BLUE)
 # search_terms_file = 'search_terms.txt'    # Commented out to allow for file search dialogue
-search_terms_file = open_file_dialog()      # Open TKinter file dialogue - switch with line above for txt file in dir
-search_terms = check_search_terms_file(search_terms_file)               # retrieve search terms
-dataframes_dict = {search_term: [] for search_term in search_terms}     # Initialize dataframes_dict with empty lists
+search_terms_file = open_file_dialog()  # Open TKinter file dialogue - switch with line above for txt file in dir
+search_terms = check_search_terms_file(search_terms_file)  # retrieve search terms
+dataframes_dict = {search_term: [] for search_term in search_terms}  # Initialize dataframes_dict with empty lists
 
 count, start_time, total_channels = 0, t.time(), sum(1 for dialog in dialogs if dialog.is_channel)
 
@@ -677,10 +685,20 @@ count, start_time, total_channels = 0, t.time(), sum(1 for dialog in dialogs if 
 reset_colour, green_colour, yellow_colour, pink_colour = '\033[0m', '\033[32m', '\033[33m', '\x1b[38;2;255;20;147m'
 
 # -- Get user input for start and end dates, and convert them to timezone-aware datetime objects.
+# -- These timezone-aware datetime objects are needed to compare message dates with the specified date range.
+# -- The start date is set to the beginning of the day (hour=0, minute=0, second=0, microsecond=0), and the end date is
+#    set to the end of the day (hour=23, minute=59, second=59, microsecond=999999).
+# -- This ensures that messages are filtered correctly based on the user-specified date range.
+# -- If the user does not provide a start date or end date, the corresponding variable is set to None, which will not
+#    restrict the search by that date boundary.
 start_date_str = input("Enter the start date (dd/mm/yyyy) or leave it blank for no start date: ")
 end_date_str = input("Enter the end date (dd/mm/yyyy) or leave it blank for no end date: ")
-start_date = datetime.datetime.strptime(start_date_str, "%d/%m/%Y").replace(hour=0, minute=0, second=0, microsecond=0).astimezone(pytz.UTC) if start_date_str.strip() else None
-end_date = datetime.datetime.strptime(end_date_str, "%d/%m/%Y").replace(hour=23, minute=59, second=59, microsecond=999999).astimezone(pytz.UTC) if end_date_str.strip() else None
+start_date = datetime.datetime.strptime(start_date_str, "%d/%m/%Y").replace(hour=0, minute=0, second=0,
+                                                                            microsecond=0).astimezone(
+    pytz.UTC) if start_date_str.strip() else None
+end_date = datetime.datetime.strptime(end_date_str, "%d/%m/%Y").replace(hour=23, minute=59, second=59,
+                                                                        microsecond=999999).astimezone(
+    pytz.UTC) if end_date_str.strip() else None
 
 # Add a prompt to ask the user if they want to download media
 download_media = input("Do you want to download media files? (yes/no): ").strip().lower()
@@ -702,11 +720,10 @@ for dialog in dialogs:
         # Get the channel_id
         channel_id = channel.channel_id if channel.channel_id else channel.chat_id
 
-
         # ---- Select what reporting information you want
         # print(channel_progress + "¦ Searching..." + str(channel) + f"{dialog.title}")   # Channel ID details & Channel Name
         # print(channel_progress + "¦ Searching..." + str(channel))                       # Just Channel ID details
-        print(channels_progress + "¦ Searching Channel: " + f"{dialog.title}")            # Just Channel name
+        print(channels_progress + "¦ Searching Channel: " + f"{dialog.title}")  # Just Channel name
 
         for search_string in search_terms:
             # Prints the "searching" statement and allows it to be overwritten
@@ -727,31 +744,26 @@ for dialog in dialogs:
 
                     # Download media files only if the user chose to do so
                     if download_media == 'yes' and message.media:
-
                         current_datetime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-                        media_path = os.path.join(media_folder_path, f'media export - tg-keyword-trends - {now}')
+                        media_path = os.path.join(media_folder_path,
+                                                  f'media export - tg-keyword-trends - {now}')
                         if not os.path.exists(media_path):
                             os.makedirs(media_path)
-
-                        filename = f"{channel_id}_{message.id}"
-                        file_path = os.path.join(media_path, filename)
-
-                        if os.path.exists(file_path):  # Check if the file already exists
-                            print(f'\r{yellow_colour}Media file already exists: {reset_colour}{file_path}  ',
-                                  flush=True)
-                        else:
+                        try:
+                            filename = f"{channel_id}_{message.id}"
+                            file_path = os.path.join(media_path, filename)
                             with tqdm(desc=f"Downloading {filename}", total=1, unit="B", unit_scale=True) as pbar:
                                 def callback(update_bytes, total_bytes):
                                     pbar.update(update_bytes - pbar.n)
-                                try:
-                                    client.download_media(message, file_path, progress_callback=callback)
 
-                                except Exception as e:
-                                    print(f"\rError downloading media file: {e}  ", flush=True)
 
-                        messages.append(message_text)  # Append the message text
-                        time.append(message.date)  # Get timestamp
-                        message_ids.append(message.id)
+                                client.download_media(message, file_path, progress_callback=callback)
+                        except Exception as e:
+                            print(f"\rError downloading media file: {e}  ", flush=True)
+
+                    messages.append(message_text)  # Append the message text
+                    time.append(message.date)  # Get timestamp
+                    message_ids.append(message.id)
 
             if messages:  # If messages list is not empty
                 channel_id = channel.channel_id if channel.channel_id else channel.chat_id
@@ -841,5 +853,4 @@ except ValueError as e:
 
 printC('\nProcess completed', Fore.GREEN)
 client.disconnect()  # Disconnect the Telethon client from the Telegram server
-
 
