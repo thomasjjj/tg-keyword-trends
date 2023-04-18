@@ -1,6 +1,5 @@
 import datetime
 import os
-import pickle
 import re
 import sys
 import textwrap
@@ -9,7 +8,6 @@ import tkinter as tk
 import traceback
 from collections import Counter
 from tkinter import filedialog
-import numpy as np
 
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -657,7 +655,7 @@ def generate_txt_report(all_results, channels, search_terms, output_folder, now)
 
 
 ########################################################################
-now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')  # The now variable is time at tool start, even if called later.
 printC(SCRIPT_DESCRIPTION, Fore.LIGHTYELLOW_EX)
 printC(SCRIPT_WARNING, Fore.LIGHTRED_EX)
 
@@ -679,12 +677,6 @@ count, start_time, total_channels = 0, t.time(), sum(1 for dialog in dialogs if 
 reset_colour, green_colour, yellow_colour, pink_colour = '\033[0m', '\033[32m', '\033[33m', '\x1b[38;2;255;20;147m'
 
 # -- Get user input for start and end dates, and convert them to timezone-aware datetime objects.
-# -- These timezone-aware datetime objects are needed to compare message dates with the specified date range.
-# -- The start date is set to the beginning of the day (hour=0, minute=0, second=0, microsecond=0), and the end date is
-#    set to the end of the day (hour=23, minute=59, second=59, microsecond=999999).
-# -- This ensures that messages are filtered correctly based on the user-specified date range.
-# -- If the user does not provide a start date or end date, the corresponding variable is set to None, which will not
-#    restrict the search by that date boundary.
 start_date_str = input("Enter the start date (dd/mm/yyyy) or leave it blank for no start date: ")
 end_date_str = input("Enter the end date (dd/mm/yyyy) or leave it blank for no end date: ")
 start_date = datetime.datetime.strptime(start_date_str, "%d/%m/%Y").replace(hour=0, minute=0, second=0, microsecond=0).astimezone(pytz.UTC) if start_date_str.strip() else None
@@ -714,7 +706,7 @@ for dialog in dialogs:
         # ---- Select what reporting information you want
         # print(channel_progress + "¦ Searching..." + str(channel) + f"{dialog.title}")   # Channel ID details & Channel Name
         # print(channel_progress + "¦ Searching..." + str(channel))                       # Just Channel ID details
-        print(channels_progress + "¦ Searching Channel: " + f"{dialog.title}")  # Just Channel name
+        print(channels_progress + "¦ Searching Channel: " + f"{dialog.title}")            # Just Channel name
 
         for search_string in search_terms:
             # Prints the "searching" statement and allows it to be overwritten
@@ -737,23 +729,29 @@ for dialog in dialogs:
                     if download_media == 'yes' and message.media:
 
                         current_datetime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-                        media_path = os.path.join(media_folder_path,
-                                                  f'media export - tg-keyword-trends - {now}')
+                        media_path = os.path.join(media_folder_path, f'media export - tg-keyword-trends - {now}')
                         if not os.path.exists(media_path):
                             os.makedirs(media_path)
-                        try:
-                            filename = f"{channel_id}_{message.id}"
-                            file_path = os.path.join(media_path, filename)
+
+                        filename = f"{channel_id}_{message.id}"
+                        file_path = os.path.join(media_path, filename)
+
+                        if os.path.exists(file_path):  # Check if the file already exists
+                            print(f'\r{yellow_colour}Media file already exists: {reset_colour}{file_path}  ',
+                                  flush=True)
+                        else:
                             with tqdm(desc=f"Downloading {filename}", total=1, unit="B", unit_scale=True) as pbar:
                                 def callback(update_bytes, total_bytes):
                                     pbar.update(update_bytes - pbar.n)
-                                client.download_media(message, file_path, progress_callback=callback)
-                        except Exception as e:
-                            print(f"\rError downloading media file: {e}  ", flush=True)
+                                try:
+                                    client.download_media(message, file_path, progress_callback=callback)
 
-                    messages.append(message_text)  # Append the message text
-                    time.append(message.date)  # Get timestamp
-                    message_ids.append(message.id)
+                                except Exception as e:
+                                    print(f"\rError downloading media file: {e}  ", flush=True)
+
+                        messages.append(message_text)  # Append the message text
+                        time.append(message.date)  # Get timestamp
+                        message_ids.append(message.id)
 
             if messages:  # If messages list is not empty
                 channel_id = channel.channel_id if channel.channel_id else channel.chat_id

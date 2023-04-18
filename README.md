@@ -123,3 +123,4 @@ Python Version: Python 3.11 or higher
 - [ ] custom channel list
 - [ ] wordcloud generation of all matching messages to extract additional context, terms, and insights
 - [ ] set ability to group terms into single line on graph (e.g translations/transliterations)
+- [ ] possible feature: set default location for all downloaded media with a list file of media previously downloaded to prevent duplicate
