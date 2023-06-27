@@ -1,6 +1,7 @@
 import datetime
 import os
 import pickle
+import json
 import re
 import sys
 import textwrap
@@ -793,6 +794,7 @@ try:
 
     filename_html = os.path.join(output_folder, f'all_results__{now}.html')
     filename_csv = os.path.join(output_folder, f'all_results__{now}.csv')
+    filename_json = os.path.join(output_folder, f'all_results__{now}.json')
     filename_pickle = os.path.join(output_folder, f'all_results__{now}.pickle')
     filename_png = os.path.join(output_folder, f'keyword_frequency__{now}.png')
 
@@ -817,6 +819,15 @@ try:
             printC(f"Saved {filename_csv}", Fore.GREEN)
         except IOError as e:
             print(f'Error making CSV: {e}')
+            traceback.print_exc()
+
+        # Export to a JSON
+        try:
+            printC('Exporting to json...', Fore.YELLOW)
+            all_results.to_json(filename_json, orient='records', force_ascii=False)
+            printC(f"Saved {filename_json}", Fore.GREEN)
+        except IOError as e:
+            print(f'Error making JSON: {e}')
             traceback.print_exc()
 
         # Export to pickle file -- ERROR currently, disabled for now. Grab data from CSV for further processing instead
