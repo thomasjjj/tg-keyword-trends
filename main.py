@@ -824,7 +824,7 @@ try:
         # Export to a JSON
         try:
             printC('Exporting to json...', Fore.YELLOW)
-            all_results.to_json(filename_json, orient='records', force_ascii=False)
+            all_results.to_json(filename_json, orient='records', indent=4, force_ascii=False)
             printC(f"Saved {filename_json}", Fore.GREEN)
         except IOError as e:
             print(f'Error making JSON: {e}')
