@@ -4,15 +4,20 @@ import sys
 import tempfile
 import unittest
 from contextlib import redirect_stdout
+from importlib.resources import files
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+SRC_ROOT = REPO_ROOT / "src"
+if str(SRC_ROOT) not in sys.path:
+    sys.path.insert(0, str(SRC_ROOT))
 
-import main
+from tg_keyword_trends import constants
+from tg_keyword_trends import env
+from tg_keyword_trends.auth import sign_in_with_2fa_password
+from tg_keyword_trends.files import check_search_terms_file, render_url
 
 
 class WorkingDirectoryTestCase(unittest.TestCase):
@@ -43,7 +48,7 @@ class EnvFileTests(WorkingDirectoryTestCase):
             encoding="utf-8",
         )
 
-        values = main.read_env_file(env_path)
+        values = env.read_env_file(env_path)
 
         self.assertEqual(values["TELEGRAM_API_ID"], "123")
         self.assertEqual(values["SPACED"], "value with spaces")
@@ -58,33 +63,33 @@ class EnvFileTests(WorkingDirectoryTestCase):
             encoding="utf-8",
         )
 
-        main.write_env_file(
+        env.write_env_file(
             {
-                main.TELEGRAM_API_ID_KEY: "456",
-                main.TELEGRAM_API_HASH_KEY: "hash with spaces",
+                constants.TELEGRAM_API_ID_KEY: "456",
+                constants.TELEGRAM_API_HASH_KEY: "hash with spaces",
             },
             env_path,
         )
 
         contents = env_path.read_text(encoding="utf-8")
-        values = main.read_env_file(env_path)
+        values = env.read_env_file(env_path)
 
         self.assertIn("# header", contents)
         self.assertIn("OTHER=value", contents)
-        self.assertEqual(values[main.TELEGRAM_API_ID_KEY], "456")
-        self.assertEqual(values[main.TELEGRAM_API_HASH_KEY], "hash with spaces")
+        self.assertEqual(values[constants.TELEGRAM_API_ID_KEY], "456")
+        self.assertEqual(values[constants.TELEGRAM_API_HASH_KEY], "hash with spaces")
 
     def test_read_legacy_api_values_reads_existing_format(self):
         legacy_path = Path("api_values.txt")
         legacy_path.write_text("api_id:\n123\napi_hash:\nabc123\n", encoding="utf-8")
 
-        values = main.read_legacy_api_values(legacy_path)
+        values = env.read_legacy_api_values(legacy_path)
 
         self.assertEqual(
             values,
             {
-                main.TELEGRAM_API_ID_KEY: "123",
-                main.TELEGRAM_API_HASH_KEY: "abc123",
+                constants.TELEGRAM_API_ID_KEY: "123",
+                constants.TELEGRAM_API_HASH_KEY: "abc123",
             },
         )
 
@@ -92,36 +97,36 @@ class EnvFileTests(WorkingDirectoryTestCase):
         Path("api_values.txt").write_text("api_id:\n123\napi_hash:\nabc123\n", encoding="utf-8")
 
         with redirect_stdout(io.StringIO()):
-            env_values, api_id, api_hash, session_name = main.load_telegram_env_credentials()
+            env_values, api_id, api_hash, session_name = env.load_telegram_env_credentials()
 
         self.assertEqual(api_id, 123)
         self.assertEqual(api_hash, "abc123")
-        self.assertEqual(session_name, main.DEFAULT_TELEGRAM_SESSION_NAME)
-        self.assertEqual(env_values[main.TELEGRAM_SESSION_KEY], main.DEFAULT_TELEGRAM_SESSION_NAME)
+        self.assertEqual(session_name, constants.DEFAULT_TELEGRAM_SESSION_NAME)
+        self.assertEqual(env_values[constants.TELEGRAM_SESSION_KEY], constants.DEFAULT_TELEGRAM_SESSION_NAME)
 
-        saved_values = main.read_env_file(Path(".env"))
-        self.assertEqual(saved_values[main.TELEGRAM_API_ID_KEY], "123")
-        self.assertEqual(saved_values[main.TELEGRAM_API_HASH_KEY], "abc123")
-        self.assertEqual(saved_values[main.TELEGRAM_SESSION_KEY], main.DEFAULT_TELEGRAM_SESSION_NAME)
+        saved_values = env.read_env_file(Path(".env"))
+        self.assertEqual(saved_values[constants.TELEGRAM_API_ID_KEY], "123")
+        self.assertEqual(saved_values[constants.TELEGRAM_API_HASH_KEY], "abc123")
+        self.assertEqual(saved_values[constants.TELEGRAM_SESSION_KEY], constants.DEFAULT_TELEGRAM_SESSION_NAME)
 
     def test_prompt_for_env_value_saves_entered_value(self):
         env_values = {}
 
         with patch("builtins.input", return_value="entered"):
-            value = main.prompt_for_env_value(env_values, "SAMPLE_KEY", "Sample prompt: ")
+            value = env.prompt_for_env_value(env_values, "SAMPLE_KEY", "Sample prompt: ")
 
         self.assertEqual(value, "entered")
         self.assertEqual(env_values["SAMPLE_KEY"], "entered")
-        self.assertEqual(main.read_env_file(Path(".env"))["SAMPLE_KEY"], "entered")
+        self.assertEqual(env.read_env_file(Path(".env"))["SAMPLE_KEY"], "entered")
 
     def test_sign_in_with_2fa_password_uses_saved_password(self):
         client = Mock()
-        env_values = {main.TELEGRAM_2FA_PASSWORD_KEY: "secret"}
+        env_values = {constants.TELEGRAM_2FA_PASSWORD_KEY: "secret"}
 
-        main.sign_in_with_2fa_password(client, env_values)
+        sign_in_with_2fa_password(client, env_values)
 
         client.sign_in.assert_called_once_with(password="secret")
-        self.assertEqual(main.read_env_file(Path(".env"))[main.TELEGRAM_2FA_PASSWORD_KEY], "secret")
+        self.assertEqual(env.read_env_file(Path(".env"))[constants.TELEGRAM_2FA_PASSWORD_KEY], "secret")
 
 
 class PureHelperTests(WorkingDirectoryTestCase):
@@ -130,14 +135,19 @@ class PureHelperTests(WorkingDirectoryTestCase):
         terms_path.write_text("alpha\nbeta\n", encoding="utf-8")
 
         with redirect_stdout(io.StringIO()):
-            search_terms = main.check_search_terms_file(terms_path)
+            search_terms = check_search_terms_file(terms_path)
 
         self.assertEqual(search_terms, ["alpha", "beta"])
 
     def test_render_url_returns_link_markup(self):
         url = "https://t.me/example/1"
 
-        self.assertEqual(main.render_url(url), f'<a href="{url}">{url}</a>')
+        self.assertEqual(render_url(url), f'<a href="{url}">{url}</a>')
+
+    def test_report_template_is_packaged(self):
+        template_text = files("tg_keyword_trends").joinpath("report_template_text.txt").read_text(encoding="utf-8")
+
+        self.assertIn("Telegram", template_text)
 
 
 if __name__ == "__main__":

@@ -57,6 +57,10 @@ Install the required Python dependencies using pip:
 
 ```pip install -r requirements.txt```
 
+Run the tool from the repository root:
+
+```python main.py```
+
 # Features
 - Graph adjusts scale to oldest and newest posts.
 - CSV generated for further processing.
@@ -92,15 +96,14 @@ If your Telegram account has two-factor authentication enabled, the script promp
 Existing **api_values.txt** API credentials are migrated into **.env** automatically when **.env** does not already contain them.
 
 
-# Functions:
+# Project Structure:
 
-- **connect_to_telegram**: Read Telegram credentials from '.env', prompt for missing values, and connect to Telegram.
-- **check_search_terms_file**: Read search terms from 'search_terms.txt' or prompt the user to enter search terms.
-- **create_output_directory**: Create a timestamped directory for storing output files.
-- **print_colored**: Print text in specified color using the colorama module.
-- **render_url**: Generate HTML code for a hyperlink using a URL and message text.
-- **generate_report**: Generate a report containing search results for each channel.
-- **plot_keyword_frequency**: Plot the message count per day for each search term in a graph.
+- **main.py**: Thin entry point for running the tool from the repository root.
+- **src/tg_keyword_trends/app.py**: Main application workflow.
+- **src/tg_keyword_trends/auth.py** and **env.py**: Telegram authentication and `.env` credential handling.
+- **src/tg_keyword_trends/files.py**: File dialogs, search-term loading, output directory creation, and HTML link rendering.
+- **src/tg_keyword_trends/plotting.py** and **reports.py**: Graph, PDF, and text report generation.
+- **tests/**: Unit tests for import-safe helper modules.
 
 # Tips:
 - Due to the date filtering feature, this tool also works well as a Telegram search engine that allows date-filtered results. Simply run the search in the date window needed and open up the output html file for a list of messages that match and their links.
