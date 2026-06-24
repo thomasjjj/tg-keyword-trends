@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, time, timezone, tzinfo
+from datetime import datetime, time, timezone as datetime_timezone, tzinfo
 import re
 from typing import Callable, Iterable, TypeAlias
 from urllib.parse import unquote, urlparse
@@ -23,6 +23,10 @@ class DateRange:
     start: datetime | None
     end: datetime | None
 
+    def __iter__(self):
+        yield self.start
+        yield self.end
+
 
 @dataclass(frozen=True)
 class SearchTermGroup:
@@ -35,7 +39,7 @@ def content_lines(lines: Iterable[str]) -> list[str]:
     return [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
 
 
-def parse_date_value(value: str, *, is_end: bool = False, tz: tzinfo | None = timezone.utc) -> datetime | None:
+def parse_date_value(value: str, *, is_end: bool = False, tz: tzinfo | None = datetime_timezone.utc) -> datetime | None:
     """Parse a dd/mm/yyyy input value, returning None for blank input."""
     cleaned_value = value.strip()
     if not cleaned_value:
@@ -46,19 +50,39 @@ def parse_date_value(value: str, *, is_end: bool = False, tz: tzinfo | None = ti
     except ValueError as exc:
         raise ValueError(f"Expected date in dd/mm/yyyy format, got {value!r}.") from exc
 
+    return _datetime_at_boundary(parsed, is_end=is_end, tz=tz)
+
+
+def _datetime_at_boundary(parsed: datetime, *, is_end: bool, tz: tzinfo | None) -> datetime:
     boundary = time.max if is_end else time.min
-    return datetime.combine(parsed.date(), boundary, tzinfo=tz)
+    naive_value = datetime.combine(parsed.date(), boundary)
+    if tz is None:
+        return naive_value
+    if hasattr(tz, "localize"):
+        return tz.localize(naive_value)
+    return naive_value.replace(tzinfo=tz)
+
+
+def parse_date_bound(
+    value: str,
+    is_end: bool = False,
+    timezone: tzinfo | None = datetime_timezone.utc,
+) -> datetime | None:
+    """Backward-compatible wrapper for parsing a start/end date bound."""
+    return parse_date_value(value, is_end=is_end, tz=timezone)
 
 
 def parse_date_range(
     start_value: str,
     end_value: str,
     *,
-    tz: tzinfo | None = timezone.utc,
+    tz: tzinfo | None = datetime_timezone.utc,
+    timezone: tzinfo | None = None,
 ) -> DateRange:
     """Parse and validate a start/end date range from dd/mm/yyyy strings."""
-    start = parse_date_value(start_value, tz=tz)
-    end = parse_date_value(end_value, is_end=True, tz=tz)
+    selected_tz = timezone if timezone is not None else tz
+    start = parse_date_value(start_value, tz=selected_tz)
+    end = parse_date_value(end_value, is_end=True, tz=selected_tz)
 
     if start is not None and end is not None and start > end:
         raise ValueError("Start date must be on or before end date.")
@@ -67,12 +91,14 @@ def parse_date_range(
 
 
 def prompt_date_range(
-    input_func: Callable[[str], str],
+    input_func: Callable[[str], str] = input,
     *,
     error_func: Callable[[str], None] | None = None,
+    output_func: Callable[[str], None] | None = print,
     start_prompt: str = "Enter the start date (dd/mm/yyyy) or leave it blank for no start date: ",
     end_prompt: str = "Enter the end date (dd/mm/yyyy) or leave it blank for no end date: ",
-    tz: tzinfo | None = timezone.utc,
+    tz: tzinfo | None = datetime_timezone.utc,
+    timezone: tzinfo | None = None,
 ) -> DateRange:
     """Prompt until a valid date range is entered."""
     while True:
@@ -80,11 +106,16 @@ def prompt_date_range(
         end_value = input_func(end_prompt)
 
         try:
-            return parse_date_range(start_value, end_value, tz=tz)
+            return parse_date_range(start_value, end_value, tz=tz, timezone=timezone)
         except ValueError as exc:
-            if error_func is None:
+            if error_func is not None:
+                error_func(str(exc))
+                continue
+            if output_func is not None:
+                output_func(f"Invalid date range: {exc}")
+                continue
+            else:
                 raise
-            error_func(str(exc))
 
 
 def parse_search_term_groups(lines: Iterable[str]) -> list[SearchTermGroup]:
@@ -164,4 +195,3 @@ def _normalize_private_channel_id(value: str) -> str:
     if value.startswith("-"):
         return value
     return f"-100{value}"
-

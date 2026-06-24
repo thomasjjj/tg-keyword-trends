@@ -15,6 +15,7 @@ from tg_keyword_trends.inputs import (
     flatten_search_term_groups,
     normalize_channel_entry,
     parse_channel_entries,
+    parse_date_bound,
     parse_date_range,
     parse_date_value,
     parse_search_term_groups,
@@ -26,6 +27,9 @@ class DateInputTests(unittest.TestCase):
     def test_parse_date_value_accepts_blank_values(self):
         self.assertIsNone(parse_date_value(""))
         self.assertIsNone(parse_date_value("   "))
+
+    def test_parse_date_bound_wraps_date_value_parser(self):
+        self.assertEqual(parse_date_bound("01/02/2026"), datetime(2026, 2, 1, tzinfo=timezone.utc))
 
     def test_parse_date_range_uses_full_day_boundaries(self):
         date_range = parse_date_range("01/02/2026", "03/02/2026")
@@ -53,6 +57,12 @@ class DateInputTests(unittest.TestCase):
 
         self.assertEqual(date_range, DateRange(start=datetime(2026, 2, 1, tzinfo=timezone.utc), end=None))
         self.assertEqual(len(errors), 1)
+
+    def test_date_range_can_be_unpacked_for_legacy_callers(self):
+        start, end = parse_date_range("01/02/2026", "")
+
+        self.assertEqual(start, datetime(2026, 2, 1, tzinfo=timezone.utc))
+        self.assertIsNone(end)
 
 
 class SearchTermInputTests(unittest.TestCase):
