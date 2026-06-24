@@ -41,6 +41,14 @@ def get_channel_title(source, entity):
     return title or str(get_channel_id(entity))
 
 
+def render_message_link(channel_id, message_id):
+    private_channel_id = str(channel_id)
+    if private_channel_id.startswith("-100"):
+        private_channel_id = private_channel_id[4:]
+
+    return f"https://t.me/c/{private_channel_id}/{message_id}"
+
+
 async def target_from_dialog(client, dialog):
     entity = await client.get_input_entity(dialog)
     return ChannelTarget(

@@ -12,10 +12,14 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from tg_keyword_trends.app import run_async
-from tg_keyword_trends.channels import ChannelTarget, resolve_channel_entries, select_channels
+from tg_keyword_trends.channels import ChannelTarget, render_message_link, resolve_channel_entries, select_channels
 
 
 class ChannelSelectionTests(unittest.TestCase):
+    def test_render_message_link_handles_private_channel_id_forms(self):
+        self.assertEqual(render_message_link("-10012345", 99), "https://t.me/c/12345/99")
+        self.assertEqual(render_message_link("12345", 99), "https://t.me/c/12345/99")
+
     def test_resolve_channel_entries_returns_targets_and_unresolved(self):
         client = SimpleNamespace()
 
