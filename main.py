@@ -24,9 +24,21 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.platypus import Paragraph, Spacer, Image, PageBreak, Preformatted, PageTemplate, BaseDocTemplate, Frame
+from telethon.errors import PasswordHashInvalidError, SessionPasswordNeededError
 from telethon.sync import TelegramClient
 
 # import stylecloud  # disabled while I fix the wordcloud
+
+
+ENV_FILE_PATH = ".env"
+LEGACY_API_VALUES_FILE_PATH = "api_values.txt"
+DEFAULT_TELEGRAM_SESSION_NAME = "session_name"
+
+TELEGRAM_API_ID_KEY = "TELEGRAM_API_ID"
+TELEGRAM_API_HASH_KEY = "TELEGRAM_API_HASH"
+TELEGRAM_PHONE_KEY = "TELEGRAM_PHONE"
+TELEGRAM_2FA_PASSWORD_KEY = "TELEGRAM_2FA_PASSWORD"
+TELEGRAM_SESSION_KEY = "TELEGRAM_SESSION"
 
 
 SCRIPT_DESCRIPTION = r"""
@@ -56,7 +68,161 @@ def printC(string, colour):
     print(colour + string + Style.RESET_ALL)
 
 
-def connect_to_telegram():
+def parse_env_value(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        quote = value[0]
+        value = value[1:-1]
+        if quote == '"':
+            value = value.replace(r"\n", "\n").replace(r"\"", '"').replace(r"\\", "\\")
+    return value
+
+
+def read_env_file(file_path=ENV_FILE_PATH):
+    env_values = {}
+
+    if not os.path.exists(file_path):
+        return env_values
+
+    with open(file_path, "r", encoding="utf-8") as env_file:
+        for raw_line in env_file:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            env_values[key.strip()] = parse_env_value(value)
+
+    return env_values
+
+
+def format_env_value(value):
+    value = str(value).replace("\n", r"\n")
+    if not value or any(character.isspace() for character in value) or any(character in value for character in '#"\''):
+        value = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{value}"'
+    return value
+
+
+def write_env_file(updated_values, file_path=ENV_FILE_PATH):
+    existing_lines = []
+    if os.path.exists(file_path):
+        with open(file_path, "r", encoding="utf-8") as env_file:
+            existing_lines = env_file.readlines()
+
+    written_keys = set()
+    output_lines = []
+
+    for raw_line in existing_lines:
+        stripped_line = raw_line.strip()
+        if not stripped_line or stripped_line.startswith("#") or "=" not in raw_line:
+            output_lines.append(raw_line)
+            continue
+
+        key = raw_line.split("=", 1)[0].strip()
+        if key in updated_values:
+            output_lines.append(f"{key}={format_env_value(updated_values[key])}\n")
+            written_keys.add(key)
+        else:
+            output_lines.append(raw_line)
+
+    if output_lines and output_lines[-1].strip():
+        output_lines.append("\n")
+
+    for key, value in updated_values.items():
+        if key not in written_keys:
+            output_lines.append(f"{key}={format_env_value(value)}\n")
+
+    with open(file_path, "w", encoding="utf-8") as env_file:
+        env_file.writelines(output_lines)
+
+
+def read_legacy_api_values(file_path=LEGACY_API_VALUES_FILE_PATH):
+    if not os.path.exists(file_path):
+        return {}
+
+    with open(file_path, "r", encoding="utf-8") as legacy_file:
+        lines = [line.strip() for line in legacy_file.readlines()]
+
+    try:
+        return {
+            TELEGRAM_API_ID_KEY: lines[1],
+            TELEGRAM_API_HASH_KEY: lines[3],
+        }
+    except IndexError:
+        printC(f"Could not read legacy API details from {file_path}.", Fore.YELLOW)
+        return {}
+
+
+def prompt_for_env_value(env_values, key, prompt, allow_empty=False):
+    value = env_values.get(key, "").strip()
+    if value:
+        return value
+
+    value = input(prompt).strip()
+    if not value and not allow_empty:
+        sys.exit(f"Missing required value for {key}.")
+
+    env_values[key] = value
+    write_env_file(env_values)
+    return value
+
+
+def load_telegram_env_credentials():
+    env_values = read_env_file()
+    legacy_api_values = read_legacy_api_values()
+    migrated_legacy_values = False
+
+    for key, value in legacy_api_values.items():
+        if value and not env_values.get(key):
+            env_values[key] = value
+            migrated_legacy_values = True
+
+    if migrated_legacy_values:
+        write_env_file(env_values)
+        printC(f"Migrated Telegram API details from {LEGACY_API_VALUES_FILE_PATH} to {ENV_FILE_PATH}.", Fore.YELLOW)
+
+    if not env_values.get(TELEGRAM_API_ID_KEY) or not env_values.get(TELEGRAM_API_HASH_KEY):
+        printC(f"No Telegram API details found in {ENV_FILE_PATH}. This should be a one-time setup.", Fore.YELLOW)
+
+    api_id = prompt_for_env_value(env_values, TELEGRAM_API_ID_KEY, "Type your Telegram API ID: ")
+    api_hash = prompt_for_env_value(env_values, TELEGRAM_API_HASH_KEY, "Type your Telegram API Hash: ")
+
+    try:
+        api_id = int(api_id)
+    except ValueError:
+        sys.exit(f"{TELEGRAM_API_ID_KEY} in {ENV_FILE_PATH} must be a number.")
+
+    if not env_values.get(TELEGRAM_SESSION_KEY, "").strip():
+        env_values[TELEGRAM_SESSION_KEY] = DEFAULT_TELEGRAM_SESSION_NAME
+        write_env_file(env_values)
+    session_name = env_values[TELEGRAM_SESSION_KEY].strip()
+
+    return env_values, api_id, api_hash, session_name
+
+
+def sign_in_with_2fa_password(client, env_values):
+    password = env_values.get(TELEGRAM_2FA_PASSWORD_KEY, "")
+
+    for attempt in range(2):
+        if not password:
+            printC("Two-factor authentication is enabled for this Telegram account.", Fore.YELLOW)
+            printC(f"The password you enter will be visible and saved in {ENV_FILE_PATH} as plaintext.", Fore.YELLOW)
+            password = input("Type your Telegram 2FA password: ")
+
+        try:
+            client.sign_in(password=password)
+            env_values[TELEGRAM_2FA_PASSWORD_KEY] = password
+            write_env_file(env_values)
+            return
+        except PasswordHashInvalidError:
+            printC("The Telegram 2FA password was rejected.", Fore.RED)
+            password = ""
+
+    sys.exit(f"Could not sign in. Please update {TELEGRAM_2FA_PASSWORD_KEY} in {ENV_FILE_PATH} and try again.")
+
+
+def connect_to_telegram_legacy():
     """
      Connects to the Telegram API using the API ID and API hash values stored in a file named 'api_values.txt'.
      If the file does not exist, it prompts the user to enter their API ID and API hash and creates the file.
@@ -98,6 +264,52 @@ def connect_to_telegram():
     # Run the sub-functions and return the client
     print("Connecting to Telegram...")
     return attempt_connection_to_telegram()  # returns the client created in sub-function
+
+
+def connect_to_telegram():
+    """
+     Connects to Telegram using credentials stored in '.env'.
+     If credentials are missing, it prompts the user and saves them for future runs.
+
+     Returns:
+         TelegramClient: A connected TelegramClient instance.
+
+     Raises:
+         SystemExit: If the connection to the Telegram client fails.
+     """
+
+    print("Connecting to Telegram...")
+    env_values, api_id, api_hash, session_name = load_telegram_env_credentials()
+    client = TelegramClient(session_name, api_id, api_hash)
+
+    try:
+        client.connect()
+
+        if not client.is_user_authorized():
+            phone = prompt_for_env_value(
+                env_values,
+                TELEGRAM_PHONE_KEY,
+                "Type your Telegram phone number, including country code: ",
+            )
+
+            print("Sending Telegram login code...")
+            client.send_code_request(phone)
+            code = input("Type the Telegram login code: ").strip()
+
+            try:
+                client.sign_in(phone=phone, code=code)
+            except SessionPasswordNeededError:
+                sign_in_with_2fa_password(client, env_values)
+
+        if not client.is_user_authorized():
+            sys.exit(f"Error connecting to Telegram client. Please check credentials in {ENV_FILE_PATH}.")
+
+        print("Connection to Telegram established.")
+        print("Please wait...")
+        return client
+    except Exception:
+        client.disconnect()
+        raise
 
 
 def progress_display(start_time, total_channels, count):

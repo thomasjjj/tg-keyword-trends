@@ -9,7 +9,7 @@ In short, this tool allows you to search all the channels you follow with a list
 
 ##### Key Features
 - This tool is designed to work with sockpuppets that follow many channels covering a particular topic.
-- You can change your API details to use different accounts by editing the **api_values.txt** file.
+- You can change your API details to use different accounts by editing the **.env** file.
 - The tool is designed to work like Google Trends showing daily volume of key terms and map over time.
 - Date filtering allows you to narrow a search into a shorter time period. If left blank, it automatically scales to the maximum range of the data.
 - The tool uses Telegram search which means it is particularly good for Russian language searches and generally handles word endings well.
@@ -67,16 +67,34 @@ Install the required Python dependencies using pip:
 # Usage:
 
 1. Add the search terms, one per line, into a .txt file. You will be prompted to enter the file location shortly.
-2. Make sure you have your Telegram API details ready [https://my.telegram.org/auth]
+2. Make sure you have your Telegram API details ready [https://my.telegram.org/auth]. On first run, the script saves the API ID, API hash, phone number, and optional 2FA password to **.env**.
 3. The script will search through all the channels the user is a member of.
 4. The search results will be exported as HTML and CSV files in a timestamped output folder.
 5. The script will generate a report containing the search results for each channel.
 6. The script will plot the message count per day for each search term in a graph and save it as an image.
 
+# Telegram Authentication:
+
+The script checks **.env** first for Telegram credentials. If required values are missing, it prompts for them and writes them to **.env** for future runs.
+
+Telethon also keeps a local session file so future runs should not ask for a login code again unless that session file is deleted, expired, or invalidated.
+
+Supported **.env** keys:
+
+- TELEGRAM_API_ID
+- TELEGRAM_API_HASH
+- TELEGRAM_PHONE
+- TELEGRAM_2FA_PASSWORD
+- TELEGRAM_SESSION
+
+If your Telegram account has two-factor authentication enabled, the script prompts for the password in plaintext so it works in terminals that do not support hidden password prompts. That password is saved in **.env** as plaintext. Keep **.env** private and do not commit it.
+
+Existing **api_values.txt** API credentials are migrated into **.env** automatically when **.env** does not already contain them.
+
 
 # Functions:
 
-- **retrieve_api_details**: Read API details from 'api_details.txt'.
+- **connect_to_telegram**: Read Telegram credentials from '.env', prompt for missing values, and connect to Telegram.
 - **check_search_terms_file**: Read search terms from 'search_terms.txt' or prompt the user to enter search terms.
 - **create_output_directory**: Create a timestamped directory for storing output files.
 - **print_colored**: Print text in specified color using the colorama module.

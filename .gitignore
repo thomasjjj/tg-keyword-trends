@@ -1,0 +1,13 @@
+.env
+api_values.txt
+*.session
+*.session-journal
+*.session-shm
+*.session-wal
+
+__pycache__/
+*.py[cod]
+.venv/
+.idea/
+
+TG-Search_*/
