@@ -99,11 +99,11 @@ Install the required Python dependencies using pip:
 - matplotlib~=3.7.1
 - Telethon~=1.28.2
 - colorama~=0.4.6
-- Pillow~=9.5.0
+- Pillow~=10.0.1
 - reportlab~=3.6.12
 - numpy~=1.24.2
 - pytz~=2023.3
-- tqdm~=4.65.0
+- tqdm~=4.66.3
 
 Python Version: Python 3.11 or higher
 
