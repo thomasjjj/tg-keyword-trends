@@ -13,12 +13,14 @@ In short, this tool allows you to search all the channels you follow with a list
 - The tool is designed to work like Google Trends showing daily volume of key terms and map over time.
 - Date filtering allows you to narrow a search into a shorter time period. If left blank, it automatically scales to the maximum range of the data.
 - The tool uses Telegram search which means it is particularly good for Russian language searches and generally handles word endings well.
-- Generates individual graphs for each key term.
-- Generates aggregated graph showing all key terms in a search on the same graph for comparison.
+- Generates individual graphs for each key term or grouped term set.
+- Generates aggregated graph showing all key terms or term groups in a search on the same graph for comparison.
+- Generates percentage and rolling-percentage graphs to help compare keyword matches against estimated channel activity.
+- Generates an optional wordcloud image from matching message text when the optional `wordcloud` package is installed.
 - Compiles a report PDF that shows the graphs and prints the full code for auditing of data and validation of evidence.
 - Outputs a TXT file summary including all the main stats, e.g, date run, channels searched, and relative volume per channel.
-- Optional media download for results (this massively (like really massively) prolongs the time needed to run the tool)
-- Downloaded media has filename channelid_postid so it is easy to find the original.
+- Optional concurrent media download for results (this massively (like really massively) prolongs the time needed to run the tool).
+- Downloaded media has filename channelid_postid so it is easy to find the original, and a JSONL manifest is used to skip duplicate downloads.
 
 
 
@@ -66,16 +68,20 @@ Run the tool from the repository root:
 - CSV generated for further processing.
 - HTML file generated for opening links.
 - Generates report documenting the key details of the scrape (date, channels accessed, etc) for auditability of findings.
-- Media download
+- Media download with duplicate tracking
+- Custom channel lists
+- Grouped search terms
+- Percentage graphs and optional wordcloud output
 
 # Usage:
 
-1. Add the search terms, one per line, into a .txt file. You will be prompted to enter the file location shortly.
+1. Add the search terms into a .txt file. Use one term per line, or use `Group label: term | translation | transliteration` to plot several related terms as one line.
 2. Make sure you have your Telegram API details ready [https://my.telegram.org/auth]. On first run, the script saves the API ID, API hash, phone number, and optional 2FA password to **.env**.
-3. The script will search through all the channels the user is a member of.
-4. The search results will be exported as HTML and CSV files in a timestamped output folder.
-5. The script will generate a report containing the search results for each channel.
-6. The script will plot the message count per day for each search term in a graph and save it as an image.
+3. Choose whether to search all followed channels or provide a custom channel list. Custom channel files accept usernames, `t.me` links, `t.me/c/...` links, and numeric IDs.
+4. Enter an optional date range in `dd/mm/yyyy` format. Invalid ranges are rejected and prompted again.
+5. Choose whether to download matching media. Media defaults to **TG-Media/** unless `MEDIA_OUTPUT_DIR` is set in **.env**.
+6. The search results will be exported as HTML, CSV, and JSON files in a timestamped output folder.
+7. The script will generate a TXT report and a PDF report containing generated graphs.
 
 # Telegram Authentication:
 
@@ -90,19 +96,29 @@ Supported **.env** keys:
 - TELEGRAM_PHONE
 - TELEGRAM_2FA_PASSWORD
 - TELEGRAM_SESSION
+- MEDIA_OUTPUT_DIR
+- MEDIA_DOWNLOAD_CONCURRENCY
 
 If your Telegram account has two-factor authentication enabled, the script prompts for the password in plaintext so it works in terminals that do not support hidden password prompts. That password is saved in **.env** as plaintext. Keep **.env** private and do not commit it.
 
 Existing **api_values.txt** API credentials are migrated into **.env** automatically when **.env** does not already contain them.
 
+# Media Downloads:
+
+Downloaded media is saved to **TG-Media/** by default. Set `MEDIA_OUTPUT_DIR` in **.env** to use a different folder, and set `MEDIA_DOWNLOAD_CONCURRENCY` to control concurrent downloads. The default concurrency is `3`.
+
+The media manifest is stored as `media_manifest.jsonl` in the media output folder. Each record stores the channel ID, message ID, saved path, search metadata, and source link. Existing manifest records are used to skip duplicate downloads, unless the recorded file is missing.
 
 # Project Structure:
 
 - **main.py**: Thin entry point for running the tool from the repository root.
 - **src/tg_keyword_trends/app.py**: Main application workflow.
 - **src/tg_keyword_trends/auth.py** and **env.py**: Telegram authentication and `.env` credential handling.
+- **src/tg_keyword_trends/channels.py**: Followed-channel and custom-channel selection helpers.
 - **src/tg_keyword_trends/files.py**: File dialogs, search-term loading, output directory creation, and HTML link rendering.
-- **src/tg_keyword_trends/plotting.py** and **reports.py**: Graph, PDF, and text report generation.
+- **src/tg_keyword_trends/inputs.py**: Date, search-term group, and channel-list parsing helpers.
+- **src/tg_keyword_trends/media.py**: Concurrent media downloads and manifest duplicate tracking.
+- **src/tg_keyword_trends/plotting.py** and **reports.py**: Graph, wordcloud, PDF, and text report generation.
 - **tests/**: Unit tests for import-safe helper modules.
 
 # Tips:
@@ -126,6 +142,10 @@ Existing **api_values.txt** API credentials are migrated into **.env** automatic
 - pytz~=2026.2
 - tqdm~=4.68.3
 
+Optional:
+
+- wordcloud: enables wordcloud image generation. Without it, the report records a skipped wordcloud entry and continues.
+
 Python Version: Python 3.11 or higher
 
 # Testing:
@@ -138,16 +158,16 @@ Run the test suite with:
 
 ------------
 
-- [ ] prevent opened graph png from disappearing
-- [ ] add error handling to user date inputs
+- [x] prevent opened graph png from disappearing
+- [x] add error handling to user date inputs
 - [x] make graph production per term as well as aggregated to remove scaling issues
 - [x] insert all graphs into PDF report (separate from TXT file report)
 - [x] use the txt report to populate the PDF report with contextual data.
-- [ ] add asyncio options to optimise performance - particularly for media download.
-- [ ] better graphing, eg percent usage over time to adjust for new channels or surges in activity (ongoing improvements and new graphs - never complete this, just add more)
-- [ ] make sure the above is included in the report pdf
+- [x] add asyncio options to optimise performance - particularly for media download.
+- [x] better graphing, eg percent usage over time to adjust for new channels or surges in activity (ongoing improvements and new graphs - never complete this, just add more)
+- [x] make sure the above is included in the report pdf
 - [x] time range selection
-- [ ] custom channel list
-- [ ] wordcloud generation of all matching messages to extract additional context, terms, and insights
-- [ ] set ability to group terms into single line on graph (e.g translations/transliterations)
-- [ ] possible feature: set default location for all downloaded media with a list file of media previously downloaded to prevent duplicate
+- [x] custom channel list
+- [x] wordcloud generation of all matching messages to extract additional context, terms, and insights
+- [x] set ability to group terms into single line on graph (e.g translations/transliterations)
+- [x] possible feature: set default location for all downloaded media with a list file of media previously downloaded to prevent duplicate
