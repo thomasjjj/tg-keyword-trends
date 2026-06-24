@@ -51,7 +51,7 @@ SCRIPT_DESCRIPTION = r"""
   \_/\___|_|\___|\__, |_|  \__,_|_| |_| |_|   \_/_|  \___|_| |_|\__,_|___/
                   __/ |                                                   
                  |___/                                                    
-By: Tom Jarvis ¦ Twitter: @tomtomjarvis
+By: Tom Jarvis | Twitter: @tomtomjarvis
 ---------------------------------------
 This script searches messages containing specified search terms in Telegram channels the user is a member of.
 It exports the search results in HTML and CSV formats, generates a report, and plots the message count per day."""
@@ -222,50 +222,6 @@ def sign_in_with_2fa_password(client, env_values):
     sys.exit(f"Could not sign in. Please update {TELEGRAM_2FA_PASSWORD_KEY} in {ENV_FILE_PATH} and try again.")
 
 
-def connect_to_telegram_legacy():
-    """
-     Connects to the Telegram API using the API ID and API hash values stored in a file named 'api_values.txt'.
-     If the file does not exist, it prompts the user to enter their API ID and API hash and creates the file.
-
-     Returns:
-         TelegramClient: A connected TelegramClient instance.
-
-     Raises:
-         SystemExit: If the connection to the Telegram client fails.
-     """
-
-    def retrieve_or_generate_api_details():
-        api_details_file_path = 'api_values.txt'
-        if not os.path.exists(api_details_file_path):
-            printC('No API details found. Please follow the instructions. This should be a one-time setup.',
-                   Fore.YELLOW)
-            api_id = input('Type your API ID: ')
-            api_hash = input('Type your API Hash: ')
-            with open(api_details_file_path, 'w') as file:
-                file.write(f'api_id:\n{api_id}\n')
-                file.write(f'api_hash:\n{api_hash}')
-        else:
-            with open(api_details_file_path, 'r') as file:
-                lines = file.readlines()
-                api_id = int(lines[1])
-                api_hash = lines[3].strip()
-        print(f'API ID retrieved: {api_id} ¦ API Hash retrieved: {api_hash}\n')
-        return api_id, api_hash
-
-    def attempt_connection_to_telegram():
-        api_id, api_hash = retrieve_or_generate_api_details()
-        client = TelegramClient('session_name', api_id, api_hash)
-        if not client.start():
-            sys.exit("Error connecting to Telegram client. Please fix API details in api_values.txt and restart.")
-        print("Connection to Telegram established.")
-        print("Please wait...")
-        return client
-
-    # Run the sub-functions and return the client
-    print("Connecting to Telegram...")
-    return attempt_connection_to_telegram()  # returns the client created in sub-function
-
-
 def connect_to_telegram():
     """
      Connects to Telegram using credentials stored in '.env'.
@@ -341,7 +297,7 @@ def progress_display(start_time, total_channels, count):
     # Generate a 24-character progress bar
     progress_bar_length = 74
     filled_length = int(progress_percentage * progress_bar_length)
-    progress_bar = '█' * filled_length + '-' * (progress_bar_length - filled_length)
+    progress_bar = '#' * filled_length + '-' * (progress_bar_length - filled_length)
 
     time_message = f"Processed {count}/{total_channels} channels. Time elapsed: {elapsed_h:02d}:{elapsed_m:02d}:{elapsed_s:02d}. ETA: {h:02d}:{m:02d}:{s:02d}."
     progress_message = f"Progress: |{progress_bar}| {progress_percentage * 100:.1f}%"
@@ -560,8 +516,8 @@ def plot_keyword_frequency(all_results, dataframes_dict, output_folder, now):
                 daily_mentions = current_results.resample('D', on='date').size().to_frame(name='mentions')
 
                 adjusted_daily_mentions = daily_mentions.join(daily_message_count, how='outer')
-                adjusted_daily_mentions['total_messages'].fillna(method='ffill', inplace=True)
-                adjusted_daily_mentions['mentions'].fillna(0, inplace=True)
+                adjusted_daily_mentions['total_messages'] = adjusted_daily_mentions['total_messages'].ffill()
+                adjusted_daily_mentions['mentions'] = adjusted_daily_mentions['mentions'].fillna(0)
 
                 adjusted_daily_mentions['cumulative_mentions'] = adjusted_daily_mentions['mentions'].cumsum()
                 adjusted_daily_mentions['cumulative_total_messages'] = adjusted_daily_mentions[
@@ -876,204 +832,212 @@ def generate_txt_report(all_results, channels, search_terms, output_folder, now)
 
 
 ########################################################################
-now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-printC(SCRIPT_DESCRIPTION, Fore.LIGHTYELLOW_EX)
-printC(SCRIPT_WARNING, Fore.LIGHTRED_EX)
 
-client = connect_to_telegram()
-dialogs = client.get_dialogs()  # Get all the channels you are a member of
+def main():
+    now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
+    printC(SCRIPT_DESCRIPTION, Fore.LIGHTYELLOW_EX)
+    printC(SCRIPT_WARNING, Fore.LIGHTRED_EX)
 
-# Create an empty DataFrame to store the results
-all_results = pd.DataFrame(columns=['time', 'message', 'message_id', 'channel_id', 'search_term', 'link'])
+    client = connect_to_telegram()
+    dialogs = client.get_dialogs()  # Get all the channels you are a member of
 
-printC('Select the .txt file with search terms. Each search term should be on a new line.', Fore.BLUE)
-# search_terms_file = 'search_terms.txt'    # Commented out to allow for file search dialogue
-search_terms_file = open_file_dialog()  # Open TKinter file dialogue - switch with line above for txt file in dir
-search_terms = check_search_terms_file(search_terms_file)  # retrieve search terms
-dataframes_dict = {search_term: [] for search_term in search_terms}  # Initialize dataframes_dict with empty lists
+    # Create an empty DataFrame to store the results
+    all_results = pd.DataFrame(columns=['time', 'message', 'message_id', 'channel_id', 'search_term', 'link'])
 
-count, start_time, total_channels = 0, t.time(), sum(1 for dialog in dialogs if dialog.is_channel)
+    printC('Select the .txt file with search terms. Each search term should be on a new line.', Fore.BLUE)
+    # search_terms_file = 'search_terms.txt'    # Commented out to allow for file search dialogue
+    search_terms_file = open_file_dialog()  # Open TKinter file dialogue - switch with line above for txt file in dir
+    search_terms = check_search_terms_file(search_terms_file)  # retrieve search terms
+    dataframes_dict = {search_term: [] for search_term in search_terms}  # Initialize dataframes_dict with empty lists
 
-# colour codes assigned for readability (call the escape sequences with {colour_name} in fstring
-reset_colour, green_colour, yellow_colour, pink_colour = '\033[0m', '\033[32m', '\033[33m', '\x1b[38;2;255;20;147m'
+    count, start_time, total_channels = 0, t.time(), sum(1 for dialog in dialogs if dialog.is_channel)
 
-# -- Get user input for start and end dates, and convert them to timezone-aware datetime objects.
-# -- These timezone-aware datetime objects are needed to compare message dates with the specified date range.
-# -- The start date is set to the beginning of the day (hour=0, minute=0, second=0, microsecond=0), and the end date is
-#    set to the end of the day (hour=23, minute=59, second=59, microsecond=999999).
-# -- This ensures that messages are filtered correctly based on the user-specified date range.
-# -- If the user does not provide a start date or end date, the corresponding variable is set to None, which will not
-#    restrict the search by that date boundary.
-start_date_str = input("Enter the start date (dd/mm/yyyy) or leave it blank for no start date: ")
-end_date_str = input("Enter the end date (dd/mm/yyyy) or leave it blank for no end date: ")
-start_date = datetime.datetime.strptime(start_date_str, "%d/%m/%Y").replace(hour=0, minute=0, second=0,
-                                                                            microsecond=0).astimezone(
-    pytz.UTC) if start_date_str.strip() else None
-end_date = datetime.datetime.strptime(end_date_str, "%d/%m/%Y").replace(hour=23, minute=59, second=59,
-                                                                        microsecond=999999).astimezone(
-    pytz.UTC) if end_date_str.strip() else None
+    # colour codes assigned for readability (call the escape sequences with {colour_name} in fstring
+    reset_colour, green_colour, yellow_colour, pink_colour = '\033[0m', '\033[32m', '\033[33m', '\x1b[38;2;255;20;147m'
 
-# Add a prompt to ask the user if they want to download media
-download_media = input("Do you want to download media files? (yes/no): ").strip().lower()
+    # -- Get user input for start and end dates, and convert them to timezone-aware datetime objects.
+    # -- These timezone-aware datetime objects are needed to compare message dates with the specified date range.
+    # -- The start date is set to the beginning of the day (hour=0, minute=0, second=0, microsecond=0), and the end date is
+    #    set to the end of the day (hour=23, minute=59, second=59, microsecond=999999).
+    # -- This ensures that messages are filtered correctly based on the user-specified date range.
+    # -- If the user does not provide a start date or end date, the corresponding variable is set to None, which will not
+    #    restrict the search by that date boundary.
+    start_date_str = input("Enter the start date (dd/mm/yyyy) or leave it blank for no start date: ")
+    end_date_str = input("Enter the end date (dd/mm/yyyy) or leave it blank for no end date: ")
+    start_date = datetime.datetime.strptime(start_date_str, "%d/%m/%Y").replace(hour=0, minute=0, second=0,
+                                                                                microsecond=0).astimezone(
+        pytz.UTC) if start_date_str.strip() else None
+    end_date = datetime.datetime.strptime(end_date_str, "%d/%m/%Y").replace(hour=23, minute=59, second=59,
+                                                                            microsecond=999999).astimezone(
+        pytz.UTC) if end_date_str.strip() else None
 
-# If the user wants to download media, open the folder selection dialog
-if download_media == 'yes':
-    print("Select the folder to save media files.")
-    media_folder_path = open_folder_dialog()
+    # Add a prompt to ask the user if they want to download media
+    download_media = input("Do you want to download media files? (yes/no): ").strip().lower()
 
-# Iterate over each channel and process its messages
-for dialog in dialogs:
+    # If the user wants to download media, open the folder selection dialog
+    if download_media == 'yes':
+        print("Select the folder to save media files.")
+        media_folder_path = open_folder_dialog()
 
-    if dialog.is_channel:
-        count = count + 1
-        # Get the channel's InputPeerChannel object
-        channel = client.get_input_entity(dialog)
+    # Iterate over each channel and process its messages
+    for dialog in dialogs:
 
-        channels_progress = str(count) + "/" + str(total_channels)  # e.g 5/488 (how many channels processed)
-        # Get the channel_id
-        channel_id = channel.channel_id if channel.channel_id else channel.chat_id
+        if dialog.is_channel:
+            count = count + 1
+            # Get the channel's InputPeerChannel object
+            channel = client.get_input_entity(dialog)
 
-        # ---- Select what reporting information you want
-        # print(channel_progress + "¦ Searching..." + str(channel) + f"{dialog.title}")   # Channel ID details & Channel Name
-        # print(channel_progress + "¦ Searching..." + str(channel))                       # Just Channel ID details
-        print(channels_progress + "¦ Searching Channel: " + f"{dialog.title}")  # Just Channel name
+            channels_progress = str(count) + "/" + str(total_channels)  # e.g 5/488 (how many channels processed)
+            # Get the channel_id
+            channel_id = channel.channel_id if channel.channel_id else channel.chat_id
 
-        for search_string in search_terms:
-            # Prints the "searching" statement and allows it to be overwritten
-            print(f"{yellow_colour}Searching term: {reset_colour}" + search_string + "... [RUNNING]", end='',
-                  flush=True)
+            # ---- Select what reporting information you want
+            # print(channel_progress + " | Searching..." + str(channel) + f"{dialog.title}")   # Channel ID details & Channel Name
+            # print(channel_progress + " | Searching..." + str(channel))                       # Just Channel ID details
+            print(channels_progress + " | Searching Channel: " + f"{dialog.title}")  # Just Channel name
 
-            messages, time, message_ids = [], [], []
+            for search_string in search_terms:
+                # Prints the "searching" statement and allows it to be overwritten
+                print(f"{yellow_colour}Searching term: {reset_colour}" + search_string + "... [RUNNING]", end='',
+                      flush=True)
 
-            pattern = re.compile(search_string, re.IGNORECASE)  # Perform a case-insensitive search using regex
-            search_string = pattern.pattern  # Convert the pattern to a string
+                messages, time, message_ids = [], [], []
 
-            for message in client.iter_messages(channel, search=search_string):
-                # Filter messages within the specified date range
-                if (start_date is None or message.date >= start_date) and (
-                        end_date is None or message.date <= end_date):
+                pattern = re.compile(search_string, re.IGNORECASE)  # Perform a case-insensitive search using regex
+                search_string = pattern.pattern  # Convert the pattern to a string
 
-                    message_text = message.message  # Extract the message text
+                for message in client.iter_messages(channel, search=search_string):
+                    # Filter messages within the specified date range
+                    if (start_date is None or message.date >= start_date) and (
+                            end_date is None or message.date <= end_date):
 
-                    # Download media files only if the user chose to do so
-                    if download_media == 'yes' and message.media:
-                        current_datetime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-                        media_path = os.path.join(media_folder_path,
-                                                  f'media export - tg-keyword-trends - {now}')
-                        if not os.path.exists(media_path):
-                            os.makedirs(media_path)
-                        try:
-                            filename = f"{channel_id}_{message.id}"
-                            file_path = os.path.join(media_path, filename)
-                            with tqdm(desc=f"Downloading {filename}", total=1, unit="B", unit_scale=True) as pbar:
-                                def callback(update_bytes, total_bytes):
-                                    pbar.update(update_bytes - pbar.n)
+                        message_text = message.message  # Extract the message text
+
+                        # Download media files only if the user chose to do so
+                        if download_media == 'yes' and message.media:
+                            current_datetime = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+                            media_path = os.path.join(media_folder_path,
+                                                      f'media export - tg-keyword-trends - {now}')
+                            if not os.path.exists(media_path):
+                                os.makedirs(media_path)
+                            try:
+                                filename = f"{channel_id}_{message.id}"
+                                file_path = os.path.join(media_path, filename)
+                                with tqdm(desc=f"Downloading {filename}", total=1, unit="B", unit_scale=True) as pbar:
+                                    def callback(update_bytes, total_bytes):
+                                        pbar.update(update_bytes - pbar.n)
 
 
-                                client.download_media(message, file_path, progress_callback=callback)
-                        except Exception as e:
-                            print(f"\rError downloading media file: {e}  ", flush=True)
+                                    client.download_media(message, file_path, progress_callback=callback)
+                            except Exception as e:
+                                print(f"\rError downloading media file: {e}  ", flush=True)
 
-                    messages.append(message_text)  # Append the message text
-                    time.append(message.date)  # Get timestamp
-                    message_ids.append(message.id)
+                        messages.append(message_text)  # Append the message text
+                        time.append(message.date)  # Get timestamp
+                        message_ids.append(message.id)
 
-            if messages:  # If messages list is not empty
-                channel_id = channel.channel_id if channel.channel_id else channel.chat_id
-                links = ['https://t.me/c/' + str(channel_id) + '/' + str(message_id) for message_id in message_ids]
-                data = {'time': time, 'message': messages, 'message_id': message_ids, 'channel_id': channel_id,
-                        'link': links}
-                data['search_term'] = search_string  # Add the search term to the data
-                df = pd.DataFrame(data)
+                if messages:  # If messages list is not empty
+                    channel_id = channel.channel_id if channel.channel_id else channel.chat_id
+                    links = ['https://t.me/c/' + str(channel_id) + '/' + str(message_id) for message_id in message_ids]
+                    data = {'time': time, 'message': messages, 'message_id': message_ids, 'channel_id': channel_id,
+                            'link': links}
+                    data['search_term'] = search_string  # Add the search term to the data
+                    df = pd.DataFrame(data)
 
-                print(
-                    f'\r{reset_colour}✓{green_colour}Searched term: {reset_colour}{search_string} - {green_colour}Results: {len(messages)}{reset_colour}',
-                    flush=True)
+                    print(
+                        f'\r{reset_colour}OK{green_colour} Searched term: {reset_colour}{search_string} - {green_colour}Results: {len(messages)}{reset_colour}',
+                        flush=True)
 
-                all_results = pd.concat([all_results, pd.DataFrame(data)], ignore_index=True)  # Add to all_results DF
-                dataframes_dict[search_string].append(df)  # Add the current DataFrame to the list
-            else:
-                print(
-                    f'\r{reset_colour}✓{green_colour}Searched term: {reset_colour}{search_string} - {yellow_colour}No results{reset_colour}',
-                    flush=True)
+                    all_results = pd.concat([all_results, pd.DataFrame(data)], ignore_index=True)  # Add to all_results DF
+                    dataframes_dict[search_string].append(df)  # Add the current DataFrame to the list
+                else:
+                    print(
+                        f'\r{reset_colour}OK{green_colour} Searched term: {reset_colour}{search_string} - {yellow_colour}No results{reset_colour}',
+                        flush=True)
 
-            t.sleep(1)  # Wait for 1 seconds to avoid rate limits - going lower seems to cause issues
+                t.sleep(1)  # Wait for 1 seconds to avoid rate limits - going lower seems to cause issues
 
-        progress_display(start_time, total_channels, count)  # Runs the progress bar
-
-try:
-    output_folder = create_output_directory(f'TG-Search_{now}')
-
-    filename_html = os.path.join(output_folder, f'all_results__{now}.html')
-    filename_csv = os.path.join(output_folder, f'all_results__{now}.csv')
-    filename_json = os.path.join(output_folder, f'all_results__{now}.json')
-    filename_pickle = os.path.join(output_folder, f'all_results__{now}.pickle')
-    filename_png = os.path.join(output_folder, f'keyword_frequency__{now}.png')
+            progress_display(start_time, total_channels, count)  # Runs the progress bar
 
     try:
-        # Export to HTML
-        try:
-            with open(filename_html, 'w', encoding='utf-8') as f:
-                printC('Making HTML output file...', Fore.YELLOW)
-                print("DataFrame before exporting to HTML:")
-                print(all_results)
-                html = all_results.to_html(index=False, formatters={'link': render_url}, escape=False)
-                f.write(html)
-                printC(f"Saved {filename_html}", Fore.GREEN)
-        except IOError as e:
-            print(f'Error making HTML file: {e}')
-            traceback.print_exc()
+        output_folder = create_output_directory(f'TG-Search_{now}')
 
-        # Export to a CSV
-        try:
-            printC('Exporting to csv...', Fore.YELLOW)
-            all_results.to_csv(filename_csv, index=False, encoding='utf-8')
-            printC(f"Saved {filename_csv}", Fore.GREEN)
-        except IOError as e:
-            print(f'Error making CSV: {e}')
-            traceback.print_exc()
+        filename_html = os.path.join(output_folder, f'all_results__{now}.html')
+        filename_csv = os.path.join(output_folder, f'all_results__{now}.csv')
+        filename_json = os.path.join(output_folder, f'all_results__{now}.json')
+        filename_pickle = os.path.join(output_folder, f'all_results__{now}.pickle')
+        filename_png = os.path.join(output_folder, f'keyword_frequency__{now}.png')
 
-        # Export to a JSON
         try:
-            printC('Exporting to json...', Fore.YELLOW)
-            all_results.to_json(filename_json, orient='records', indent=4, force_ascii=False)
-            printC(f"Saved {filename_json}", Fore.GREEN)
-        except IOError as e:
-            print(f'Error making JSON: {e}')
-            traceback.print_exc()
+            # Export to HTML
+            try:
+                with open(filename_html, 'w', encoding='utf-8') as f:
+                    printC('Making HTML output file...', Fore.YELLOW)
+                    print("DataFrame before exporting to HTML:")
+                    print(all_results)
+                    html = all_results.to_html(index=False, formatters={'link': render_url}, escape=False)
+                    f.write(html)
+                    printC(f"Saved {filename_html}", Fore.GREEN)
+            except IOError as e:
+                print(f'Error making HTML file: {e}')
+                traceback.print_exc()
 
-        # Export to pickle file -- ERROR currently, disabled for now. Grab data from CSV for further processing instead
-        '''
-        try:
-            printC('Saving data to a pickle file...', Fore.YELLOW)
-            with open(filename_pickle, 'wb') as f:
-                pickle.dump(all_results, f)
-            printC(f"Saved {filename_pickle}", Fore.GREEN)
-        except IOError as e:
-            print(f'Error saving to pickle file: {e}')
-            traceback.print_exc()
-        '''
+            # Export to a CSV
+            try:
+                printC('Exporting to csv...', Fore.YELLOW)
+                all_results.to_csv(filename_csv, index=False, encoding='utf-8')
+                printC(f"Saved {filename_csv}", Fore.GREEN)
+            except IOError as e:
+                print(f'Error making CSV: {e}')
+                traceback.print_exc()
 
-        # plot all time graphs
-        plot_keyword_frequency(all_results, dataframes_dict, output_folder, now)
+            # Export to a JSON
+            try:
+                printC('Exporting to json...', Fore.YELLOW)
+                all_results.to_json(filename_json, orient='records', indent=4, force_ascii=False)
+                printC(f"Saved {filename_json}", Fore.GREEN)
+            except IOError as e:
+                print(f'Error making JSON: {e}')
+                traceback.print_exc()
 
-        # Generate the .txt report
-        try:
-            printC('Generating .txt report...', Fore.YELLOW)
-            channels = [dialog for dialog in dialogs if dialog.is_channel]
-            generate_txt_report(all_results, channels, search_terms, output_folder, now)
-            printC('Report .txt generated.', Fore.GREEN)
-        except Exception as e:
-            print(f'Error generating .txt report: {e}')
+            # Export to pickle file -- ERROR currently, disabled for now. Grab data from CSV for further processing instead
+            '''
+            try:
+                printC('Saving data to a pickle file...', Fore.YELLOW)
+                with open(filename_pickle, 'wb') as f:
+                    pickle.dump(all_results, f)
+                printC(f"Saved {filename_pickle}", Fore.GREEN)
+            except IOError as e:
+                print(f'Error saving to pickle file: {e}')
+                traceback.print_exc()
+            '''
+
+            # plot all time graphs
+            plot_keyword_frequency(all_results, dataframes_dict, output_folder, now)
+
+            # Generate the .txt report
+            try:
+                printC('Generating .txt report...', Fore.YELLOW)
+                channels = [dialog for dialog in dialogs if dialog.is_channel]
+                generate_txt_report(all_results, channels, search_terms, output_folder, now)
+                printC('Report .txt generated.', Fore.GREEN)
+            except Exception as e:
+                print(f'Error generating .txt report: {e}')
+                traceback.print_exc()
+
+        except ValueError as e:
+            printC('Error.', Fore.RED)
             traceback.print_exc()
 
     except ValueError as e:
         printC('Error.', Fore.RED)
-        traceback.print_exc()
 
-except ValueError as e:
-    printC('Error.', Fore.RED)
+    printC('\nProcess completed', Fore.GREEN)
+    client.disconnect()  # Disconnect the Telethon client from the Telegram server
 
-printC('\nProcess completed', Fore.GREEN)
-client.disconnect()  # Disconnect the Telethon client from the Telegram server
+
+
+
+if __name__ == "__main__":
+    main()
 

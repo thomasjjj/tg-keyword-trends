@@ -113,17 +113,23 @@ Existing **api_values.txt** API credentials are migrated into **.env** automatic
 
 # Dependencies:
 
-- pandas~=2.0.0
-- matplotlib~=3.7.1
-- Telethon~=1.28.2
+- pandas~=3.0.3
+- matplotlib~=3.11.0
+- Telethon~=1.44.0
 - colorama~=0.4.6
-- Pillow~=10.0.1
-- reportlab~=3.6.12
-- numpy~=1.24.2
-- pytz~=2023.3
-- tqdm~=4.66.3
+- Pillow~=12.2.0
+- reportlab~=5.0.0
+- numpy~=2.5.0
+- pytz~=2026.2
+- tqdm~=4.68.3
 
 Python Version: Python 3.11 or higher
+
+# Testing:
+
+Run the test suite with:
+
+```python -m unittest discover -s tests```
 
 # TODO
 
