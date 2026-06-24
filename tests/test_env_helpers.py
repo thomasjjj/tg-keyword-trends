@@ -1,3 +1,4 @@
+import asyncio
 import io
 import os
 import sys
@@ -6,7 +7,7 @@ import unittest
 from contextlib import redirect_stdout
 from importlib.resources import files
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +17,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from tg_keyword_trends import constants
 from tg_keyword_trends import env
+from tg_keyword_trends.app import run_async
 from tg_keyword_trends.auth import sign_in_with_2fa_password
 from tg_keyword_trends.files import check_search_terms_file, render_url
 
@@ -121,11 +123,12 @@ class EnvFileTests(WorkingDirectoryTestCase):
 
     def test_sign_in_with_2fa_password_uses_saved_password(self):
         client = Mock()
+        client.sign_in = AsyncMock()
         env_values = {constants.TELEGRAM_2FA_PASSWORD_KEY: "secret"}
 
-        sign_in_with_2fa_password(client, env_values)
+        run_async(sign_in_with_2fa_password(client, env_values))
 
-        client.sign_in.assert_called_once_with(password="secret")
+        client.sign_in.assert_awaited_once_with(password="secret")
         self.assertEqual(env.read_env_file(Path(".env"))[constants.TELEGRAM_2FA_PASSWORD_KEY], "secret")
 
 
@@ -148,6 +151,21 @@ class PureHelperTests(WorkingDirectoryTestCase):
         template_text = files("tg_keyword_trends").joinpath("report_template_text.txt").read_text(encoding="utf-8")
 
         self.assertIn("Telegram", template_text)
+
+    def test_run_async_returns_coroutine_result(self):
+        async def sample():
+            return "done"
+
+        self.assertEqual(run_async(sample()), "done")
+
+    def test_run_async_returns_result_when_loop_is_already_running(self):
+        async def outer():
+            async def sample():
+                return "done"
+
+            return run_async(sample())
+
+        self.assertEqual(asyncio.run(outer()), "done")
 
 
 if __name__ == "__main__":

@@ -2,14 +2,14 @@ import sys
 
 from colorama import Fore
 from telethon.errors import PasswordHashInvalidError, SessionPasswordNeededError
-from telethon.sync import TelegramClient
+from telethon import TelegramClient
 
 from .console import printC
 from .constants import ENV_FILE_PATH, TELEGRAM_2FA_PASSWORD_KEY, TELEGRAM_PHONE_KEY
 from .env import load_telegram_env_credentials, prompt_for_env_value, write_env_file
 
 
-def sign_in_with_2fa_password(client, env_values):
+async def sign_in_with_2fa_password(client, env_values):
     password = env_values.get(TELEGRAM_2FA_PASSWORD_KEY, "")
 
     for _ in range(2):
@@ -19,7 +19,7 @@ def sign_in_with_2fa_password(client, env_values):
             password = input("Type your Telegram 2FA password: ")
 
         try:
-            client.sign_in(password=password)
+            await client.sign_in(password=password)
             env_values[TELEGRAM_2FA_PASSWORD_KEY] = password
             write_env_file(env_values)
             return
@@ -30,7 +30,7 @@ def sign_in_with_2fa_password(client, env_values):
     sys.exit(f"Could not sign in. Please update {TELEGRAM_2FA_PASSWORD_KEY} in {ENV_FILE_PATH} and try again.")
 
 
-def connect_to_telegram():
+async def connect_to_telegram():
     """
      Connects to Telegram using credentials stored in '.env'.
      If credentials are missing, it prompts the user and saves them for future runs.
@@ -47,9 +47,9 @@ def connect_to_telegram():
     client = TelegramClient(session_name, api_id, api_hash)
 
     try:
-        client.connect()
+        await client.connect()
 
-        if not client.is_user_authorized():
+        if not await client.is_user_authorized():
             phone = prompt_for_env_value(
                 env_values,
                 TELEGRAM_PHONE_KEY,
@@ -57,20 +57,20 @@ def connect_to_telegram():
             )
 
             print("Sending Telegram login code...")
-            client.send_code_request(phone)
+            await client.send_code_request(phone)
             code = input("Type the Telegram login code: ").strip()
 
             try:
-                client.sign_in(phone=phone, code=code)
+                await client.sign_in(phone=phone, code=code)
             except SessionPasswordNeededError:
-                sign_in_with_2fa_password(client, env_values)
+                await sign_in_with_2fa_password(client, env_values)
 
-        if not client.is_user_authorized():
+        if not await client.is_user_authorized():
             sys.exit(f"Error connecting to Telegram client. Please check credentials in {ENV_FILE_PATH}.")
 
         print("Connection to Telegram established.")
         print("Please wait...")
         return client
     except Exception:
-        client.disconnect()
+        await client.disconnect()
         raise

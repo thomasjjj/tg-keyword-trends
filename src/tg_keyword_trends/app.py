@@ -1,6 +1,8 @@
+import asyncio
 import datetime
 import os
 import re
+import threading
 import time as t
 import traceback
 
@@ -19,12 +21,47 @@ from .reports import generate_txt_report
 
 
 def main():
+    return run_async(async_main())
+
+
+def run_async(coro):
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result = {}
+
+    def run_in_thread():
+        try:
+            result["value"] = asyncio.run(coro)
+        except BaseException as exc:
+            result["exception"] = exc
+
+    thread = threading.Thread(target=run_in_thread)
+    thread.start()
+    thread.join()
+
+    if "exception" in result:
+        raise result["exception"]
+    return result.get("value")
+
+
+async def async_main():
     now = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
     printC(SCRIPT_DESCRIPTION, Fore.LIGHTYELLOW_EX)
     printC(SCRIPT_WARNING, Fore.LIGHTRED_EX)
 
-    client = connect_to_telegram()
-    dialogs = client.get_dialogs()
+    client = await connect_to_telegram()
+
+    try:
+        await run_search_workflow(client, now)
+    finally:
+        await client.disconnect()
+
+
+async def run_search_workflow(client, now):
+    dialogs = await client.get_dialogs()
 
     all_results = pd.DataFrame(columns=['time', 'message', 'message_id', 'channel_id', 'search_term', 'link'])
 
@@ -57,7 +94,7 @@ def main():
     for dialog in dialogs:
         if dialog.is_channel:
             count = count + 1
-            channel = client.get_input_entity(dialog)
+            channel = await client.get_input_entity(dialog)
 
             channels_progress = str(count) + "/" + str(total_channels)
             channel_id = channel.channel_id if channel.channel_id else channel.chat_id
@@ -73,7 +110,7 @@ def main():
                 pattern = re.compile(search_string, re.IGNORECASE)
                 search_string = pattern.pattern
 
-                for message in client.iter_messages(channel, search=search_string):
+                async for message in client.iter_messages(channel, search=search_string):
                     if (start_date is None or message.date >= start_date) and (
                             end_date is None or message.date <= end_date):
 
@@ -91,7 +128,7 @@ def main():
                                     def callback(update_bytes, total_bytes):
                                         pbar.update(update_bytes - pbar.n)
 
-                                    client.download_media(message, file_path, progress_callback=callback)
+                                    await client.download_media(message, file_path, progress_callback=callback)
                             except Exception as e:
                                 print(f"\rError downloading media file: {e}  ", flush=True)
 
@@ -177,4 +214,3 @@ def main():
         printC('Error.', Fore.RED)
 
     printC('\nProcess completed', Fore.GREEN)
-    client.disconnect()
