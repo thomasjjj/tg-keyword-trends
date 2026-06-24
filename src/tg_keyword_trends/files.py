@@ -14,7 +14,7 @@ def create_output_directory(directory_name):
     return directory_name
 
 
-def open_file_dialog():
+def open_file_dialog(title="Select the search terms file"):
     """
    Opens a file dialog to allow the user to select a .txt file.
 
@@ -28,7 +28,7 @@ def open_file_dialog():
     root = tk.Tk()
     root.withdraw()
     root.wm_attributes('-topmost', True)
-    file_path = filedialog.askopenfilename(title="Select the search terms file", filetypes=[("Text files", "*.txt")])
+    file_path = filedialog.askopenfilename(title=title, filetypes=[("Text files", "*.txt")])
     root.destroy()
     if not file_path:
         sys.exit("Process cancelled.")

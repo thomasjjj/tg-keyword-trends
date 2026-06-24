@@ -12,6 +12,7 @@ from colorama import Fore
 from tqdm import tqdm
 
 from .auth import connect_to_telegram
+from .channels import select_channels
 from .console import printC
 from .constants import SCRIPT_DESCRIPTION, SCRIPT_WARNING
 from .files import check_search_terms_file, create_output_directory, open_file_dialog, open_folder_dialog, render_url
@@ -62,6 +63,8 @@ async def async_main():
 
 async def run_search_workflow(client, now):
     dialogs = await client.get_dialogs()
+    channel_selection = await select_channels(client, dialogs)
+    channels = channel_selection.targets
 
     all_results = pd.DataFrame(columns=['time', 'message', 'message_id', 'channel_id', 'search_term', 'link'])
 
@@ -70,7 +73,7 @@ async def run_search_workflow(client, now):
     search_terms = check_search_terms_file(search_terms_file)
     dataframes_dict = {search_term: [] for search_term in search_terms}
 
-    count, start_time, total_channels = 0, t.time(), sum(1 for dialog in dialogs if dialog.is_channel)
+    count, start_time, total_channels = 0, t.time(), len(channels)
 
     reset_colour = '\033[0m'
     green_colour = '\033[32m'
@@ -91,73 +94,70 @@ async def run_search_workflow(client, now):
         print("Select the folder to save media files.")
         media_folder_path = open_folder_dialog()
 
-    for dialog in dialogs:
-        if dialog.is_channel:
-            count = count + 1
-            channel = await client.get_input_entity(dialog)
+    for channel_target in channels:
+        count = count + 1
+        channel = channel_target.entity
+        channel_id = channel_target.channel_id
 
-            channels_progress = str(count) + "/" + str(total_channels)
-            channel_id = channel.channel_id if channel.channel_id else channel.chat_id
+        channels_progress = str(count) + "/" + str(total_channels)
+        print(channels_progress + " | Searching Channel: " + f"{channel_target.title}")
 
-            print(channels_progress + " | Searching Channel: " + f"{dialog.title}")
+        for search_string in search_terms:
+            print(f"{yellow_colour}Searching term: {reset_colour}" + search_string + "... [RUNNING]", end='',
+                  flush=True)
 
-            for search_string in search_terms:
-                print(f"{yellow_colour}Searching term: {reset_colour}" + search_string + "... [RUNNING]", end='',
-                      flush=True)
+            messages, time, message_ids = [], [], []
 
-                messages, time, message_ids = [], [], []
+            pattern = re.compile(search_string, re.IGNORECASE)
+            search_string = pattern.pattern
 
-                pattern = re.compile(search_string, re.IGNORECASE)
-                search_string = pattern.pattern
+            async for message in client.iter_messages(channel, search=search_string):
+                if (start_date is None or message.date >= start_date) and (
+                        end_date is None or message.date <= end_date):
 
-                async for message in client.iter_messages(channel, search=search_string):
-                    if (start_date is None or message.date >= start_date) and (
-                            end_date is None or message.date <= end_date):
+                    message_text = message.message
 
-                        message_text = message.message
+                    if download_media == 'yes' and message.media:
+                        media_path = os.path.join(media_folder_path,
+                                                  f'media export - tg-keyword-trends - {now}')
+                        if not os.path.exists(media_path):
+                            os.makedirs(media_path)
+                        try:
+                            filename = f"{channel_id}_{message.id}"
+                            file_path = os.path.join(media_path, filename)
+                            with tqdm(desc=f"Downloading {filename}", total=1, unit="B", unit_scale=True) as pbar:
+                                def callback(update_bytes, total_bytes):
+                                    pbar.update(update_bytes - pbar.n)
 
-                        if download_media == 'yes' and message.media:
-                            media_path = os.path.join(media_folder_path,
-                                                      f'media export - tg-keyword-trends - {now}')
-                            if not os.path.exists(media_path):
-                                os.makedirs(media_path)
-                            try:
-                                filename = f"{channel_id}_{message.id}"
-                                file_path = os.path.join(media_path, filename)
-                                with tqdm(desc=f"Downloading {filename}", total=1, unit="B", unit_scale=True) as pbar:
-                                    def callback(update_bytes, total_bytes):
-                                        pbar.update(update_bytes - pbar.n)
+                                await client.download_media(message, file_path, progress_callback=callback)
+                        except Exception as e:
+                            print(f"\rError downloading media file: {e}  ", flush=True)
 
-                                    await client.download_media(message, file_path, progress_callback=callback)
-                            except Exception as e:
-                                print(f"\rError downloading media file: {e}  ", flush=True)
+                    messages.append(message_text)
+                    time.append(message.date)
+                    message_ids.append(message.id)
 
-                        messages.append(message_text)
-                        time.append(message.date)
-                        message_ids.append(message.id)
+            if messages:
+                links = ['https://t.me/c/' + str(channel_id) + '/' + str(message_id) for message_id in message_ids]
+                data = {'time': time, 'message': messages, 'message_id': message_ids, 'channel_id': channel_id,
+                        'link': links}
+                data['search_term'] = search_string
+                df = pd.DataFrame(data)
 
-                if messages:
-                    channel_id = channel.channel_id if channel.channel_id else channel.chat_id
-                    links = ['https://t.me/c/' + str(channel_id) + '/' + str(message_id) for message_id in message_ids]
-                    data = {'time': time, 'message': messages, 'message_id': message_ids, 'channel_id': channel_id,
-                            'link': links}
-                    data['search_term'] = search_string
-                    df = pd.DataFrame(data)
+                print(
+                    f'\r{reset_colour}OK{green_colour} Searched term: {reset_colour}{search_string} - {green_colour}Results: {len(messages)}{reset_colour}',
+                    flush=True)
 
-                    print(
-                        f'\r{reset_colour}OK{green_colour} Searched term: {reset_colour}{search_string} - {green_colour}Results: {len(messages)}{reset_colour}',
-                        flush=True)
+                all_results = pd.concat([all_results, pd.DataFrame(data)], ignore_index=True)
+                dataframes_dict[search_string].append(df)
+            else:
+                print(
+                    f'\r{reset_colour}OK{green_colour} Searched term: {reset_colour}{search_string} - {yellow_colour}No results{reset_colour}',
+                    flush=True)
 
-                    all_results = pd.concat([all_results, pd.DataFrame(data)], ignore_index=True)
-                    dataframes_dict[search_string].append(df)
-                else:
-                    print(
-                        f'\r{reset_colour}OK{green_colour} Searched term: {reset_colour}{search_string} - {yellow_colour}No results{reset_colour}',
-                        flush=True)
+            t.sleep(1)
 
-                t.sleep(1)
-
-            progress_display(start_time, total_channels, count)
+        progress_display(start_time, total_channels, count)
 
     try:
         output_folder = create_output_directory(f'TG-Search_{now}')
@@ -199,7 +199,6 @@ async def run_search_workflow(client, now):
 
             try:
                 printC('Generating .txt report...', Fore.YELLOW)
-                channels = [dialog for dialog in dialogs if dialog.is_channel]
                 generate_txt_report(all_results, channels, search_terms, output_folder, now)
                 printC('Report .txt generated.', Fore.GREEN)
             except Exception as e:
