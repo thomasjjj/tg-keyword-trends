@@ -49,6 +49,25 @@ class MediaOutputDirectoryTests(WorkingDirectoryTestCase):
             absolute_path,
         )
 
+    def test_resolve_media_download_concurrency_defaults_to_three(self):
+        self.assertEqual(
+            media.resolve_media_download_concurrency({}),
+            media.DEFAULT_MEDIA_DOWNLOAD_CONCURRENCY,
+        )
+
+    def test_resolve_media_download_concurrency_uses_env_value(self):
+        self.assertEqual(
+            media.resolve_media_download_concurrency({media.MEDIA_DOWNLOAD_CONCURRENCY_KEY: "5"}),
+            5,
+        )
+
+    def test_resolve_media_download_concurrency_rejects_invalid_values(self):
+        with self.assertRaises(ValueError):
+            media.resolve_media_download_concurrency({media.MEDIA_DOWNLOAD_CONCURRENCY_KEY: "0"})
+
+        with self.assertRaises(ValueError):
+            media.resolve_media_download_concurrency({media.MEDIA_DOWNLOAD_CONCURRENCY_KEY: "fast"})
+
 
 class MediaManifestTests(WorkingDirectoryTestCase):
     def test_load_media_manifest_returns_empty_list_when_missing(self):
@@ -194,6 +213,23 @@ class MediaDownloadQueueTests(WorkingDirectoryTestCase):
 
         with self.assertRaises(ValueError):
             asyncio.run(media.download_media_queue(client, [], max_concurrency=0))
+
+    def test_download_media_queue_reports_failed_downloads(self):
+        client = Mock()
+        client.download_media = AsyncMock(side_effect=RuntimeError("network error"))
+        jobs = [
+            media.MediaDownloadJob(
+                message="message",
+                file_path="new.jpg",
+                channel_id=123,
+                message_id=1,
+            )
+        ]
+
+        results = asyncio.run(media.download_media_queue(client, jobs))
+
+        self.assertEqual(results[0].status, media.MEDIA_STATUS_FAILED)
+        self.assertEqual(results[0].error, "network error")
 
 
 if __name__ == "__main__":

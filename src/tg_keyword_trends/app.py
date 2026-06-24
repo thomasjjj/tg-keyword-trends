@@ -1,21 +1,30 @@
 import asyncio
+from collections import Counter
 import os
 import re
 import threading
 import time as t
 import traceback
+from pathlib import Path
 
 import pandas as pd
 import pytz
 from colorama import Fore
-from tqdm import tqdm
 
 from .auth import connect_to_telegram
 from .channels import render_message_link, select_channels
 from .console import printC
 from .constants import SCRIPT_DESCRIPTION, SCRIPT_WARNING
-from .files import check_search_terms_file, create_output_directory, open_file_dialog, open_folder_dialog, render_url
-from .inputs import flatten_search_term_groups, parse_search_term_groups, prompt_date_range
+from .files import check_search_terms_file, create_output_directory, open_file_dialog, render_url
+from .inputs import parse_search_term_groups, prompt_date_range
+from .media import (
+    MediaDownloadJob,
+    download_media_queue,
+    load_media_manifest,
+    media_manifest_path,
+    resolve_media_download_concurrency,
+    resolve_media_output_dir,
+)
 from .plotting import plot_keyword_frequency
 from .progress import progress_display
 from .reports import generate_txt_report
@@ -87,7 +96,6 @@ async def run_search_workflow(client, now):
     search_term_groups = parse_search_term_groups(check_search_terms_file(search_terms_file))
     if not search_term_groups:
         raise ValueError("Search terms file does not contain any active search terms.")
-    search_terms = flatten_search_term_groups(search_term_groups)
     dataframes_dict = {search_group.label: [] for search_group in search_term_groups}
 
     count, start_time, total_channels = 0, t.time(), len(channels)
@@ -99,11 +107,20 @@ async def run_search_workflow(client, now):
     date_range = prompt_date_range(timezone=pytz.UTC)
     start_date, end_date = date_range
 
-    download_media = input("Do you want to download media files? (yes/no): ").strip().lower()
+    download_media_enabled = input("Do you want to download media files? (yes/no): ").strip().lower() in {"yes", "y"}
+    media_jobs = []
+    media_output_dir = None
+    media_manifest_file = None
+    media_manifest_records = None
+    media_download_concurrency = None
 
-    if download_media == 'yes':
-        print("Select the folder to save media files.")
-        media_folder_path = open_folder_dialog()
+    if download_media_enabled:
+        media_output_dir = resolve_media_output_dir()
+        media_manifest_file = media_manifest_path(media_output_dir)
+        media_manifest_records = load_media_manifest(media_manifest_file)
+        media_download_concurrency = resolve_media_download_concurrency()
+        print(f"Media files will be saved to {media_output_dir}")
+        print(f"Previously downloaded media will be read from {media_manifest_file}")
 
     for channel_target in channels:
         count = count + 1
@@ -134,21 +151,25 @@ async def run_search_workflow(client, now):
 
                         message_text = message.message
 
-                        if download_media == 'yes' and message.media:
-                            media_path = os.path.join(media_folder_path,
-                                                      f'media export - tg-keyword-trends - {now}')
-                            if not os.path.exists(media_path):
-                                os.makedirs(media_path)
-                            try:
-                                filename = f"{channel_id}_{message.id}"
-                                file_path = os.path.join(media_path, filename)
-                                with tqdm(desc=f"Downloading {filename}", total=1, unit="B", unit_scale=True) as pbar:
-                                    def callback(update_bytes, total_bytes):
-                                        pbar.update(update_bytes - pbar.n)
+                        message_link = render_message_link(channel_id, message.id)
 
-                                    await client.download_media(message, file_path, progress_callback=callback)
-                            except Exception as e:
-                                print(f"\rError downloading media file: {e}  ", flush=True)
+                        if download_media_enabled and message.media:
+                            filename = f"{channel_id}_{message.id}"
+                            media_jobs.append(
+                                MediaDownloadJob(
+                                    message=message,
+                                    file_path=Path(media_output_dir) / filename,
+                                    channel_id=channel_id,
+                                    message_id=message.id,
+                                    metadata={
+                                        "channel_title": channel_target.title,
+                                        "search_group": search_group.label,
+                                        "search_term": search_string,
+                                        "message_date": _format_message_date(message.date),
+                                        "link": message_link,
+                                    },
+                                )
+                            )
 
                         messages.append(message_text)
                         time.append(message.date)
@@ -182,6 +203,15 @@ async def run_search_workflow(client, now):
                 t.sleep(1)
 
         progress_display(start_time, total_channels, count)
+
+    if download_media_enabled:
+        await download_queued_media(
+            client,
+            media_jobs,
+            media_manifest_file,
+            media_manifest_records,
+            media_download_concurrency,
+        )
 
     try:
         output_folder = create_output_directory(f'TG-Search_{now}')
@@ -237,3 +267,30 @@ async def run_search_workflow(client, now):
         printC('Error.', Fore.RED)
 
     printC('\nProcess completed', Fore.GREEN)
+
+
+async def download_queued_media(client, media_jobs, manifest_file, manifest_records, concurrency):
+    if not media_jobs:
+        printC("No matching media files found for download.", Fore.YELLOW)
+        return []
+
+    printC(f"Downloading {len(media_jobs)} media files with concurrency {concurrency}...", Fore.YELLOW)
+    results = await download_media_queue(
+        client,
+        media_jobs,
+        max_concurrency=concurrency,
+        manifest_path=manifest_file,
+        manifest_records=manifest_records,
+    )
+    status_counts = Counter(result.status for result in results)
+    summary = ", ".join(f"{status}: {count}" for status, count in sorted(status_counts.items()))
+    printC(f"Media download summary: {summary}", Fore.GREEN)
+    return results
+
+
+def _format_message_date(value):
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    if value is None:
+        return None
+    return str(value)

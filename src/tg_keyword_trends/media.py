@@ -12,12 +12,15 @@ from .env import read_env_file
 
 
 MEDIA_OUTPUT_DIR_KEY = "MEDIA_OUTPUT_DIR"
+MEDIA_DOWNLOAD_CONCURRENCY_KEY = "MEDIA_DOWNLOAD_CONCURRENCY"
 DEFAULT_MEDIA_OUTPUT_DIR = "TG-Media"
 DEFAULT_MEDIA_MANIFEST_FILENAME = "media_manifest.jsonl"
+DEFAULT_MEDIA_DOWNLOAD_CONCURRENCY = 3
 
 MEDIA_STATUS_DOWNLOADED = "downloaded"
 MEDIA_STATUS_REDOWNLOADED = "redownloaded"
 MEDIA_STATUS_SKIPPED_DUPLICATE = "skipped_duplicate"
+MEDIA_STATUS_FAILED = "failed"
 
 _FILE_PATH_KEYS = ("file_path", "download_path", "path")
 
@@ -39,6 +42,7 @@ class MediaDownloadResult:
     status: str
     file_path: Path | None = None
     manifest_record: Mapping[str, Any] | None = None
+    error: str | None = None
 
 
 def resolve_media_output_dir(env_values=None, env_file_path=ENV_FILE_PATH, base_dir=None):
@@ -53,6 +57,25 @@ def resolve_media_output_dir(env_values=None, env_file_path=ENV_FILE_PATH, base_
 
     root = Path(base_dir) if base_dir is not None else Path.cwd()
     return root / output_dir
+
+
+def resolve_media_download_concurrency(env_values=None, env_file_path=ENV_FILE_PATH):
+    if env_values is None:
+        env_values = read_env_file(env_file_path)
+
+    raw_value = _clean_env_value((env_values or {}).get(MEDIA_DOWNLOAD_CONCURRENCY_KEY))
+    if not raw_value:
+        return DEFAULT_MEDIA_DOWNLOAD_CONCURRENCY
+
+    try:
+        concurrency = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{MEDIA_DOWNLOAD_CONCURRENCY_KEY} must be an integer.") from exc
+
+    if concurrency < 1:
+        raise ValueError(f"{MEDIA_DOWNLOAD_CONCURRENCY_KEY} must be at least 1.")
+
+    return concurrency
 
 
 def media_manifest_path(output_dir):
@@ -221,6 +244,8 @@ async def download_media_queue(
                     file_path=final_path,
                     manifest_record=record,
                 )
+        except Exception as exc:
+            return MediaDownloadResult(job=job, status=MEDIA_STATUS_FAILED, error=str(exc))
         finally:
             async with manifest_lock:
                 in_progress_keys.discard(job_key)
